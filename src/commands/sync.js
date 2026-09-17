@@ -129,6 +129,8 @@ const {
   resolveDroidModel,
   resolveDshSessionFiles,
   parseDshIncremental,
+  resolveFreebuffDbPaths,
+  parseFreebuffIncremental,
   parseTraeCnApiIncremental,
   bucketKey,
   toUtcHalfHourStart,
@@ -300,6 +302,7 @@ const AUTO_SYNC_SOURCES = new Set([
   "droid",
   "dsh",
   "every-code",
+  "freebuff",
   "gemini",
   "goose",
   "grok",
@@ -1631,6 +1634,29 @@ async function cmdSync(argv, context = {}) {
           }
         } catch (err) {
           warnProviderParseFailure("DeepSeek Harness", err, opts);
+        }
+      }
+    }
+
+    // ── FreeBuff Desktop — passive SQLite reader ──
+    let freebuffResult = { recordsProcessed: 0, eventsAggregated: 0, bucketsQueued: 0 };
+    if (sourceAllowed("freebuff")) {
+      const freebuffDbPaths = resolveFreebuffDbPaths(process.env);
+      if (freebuffDbPaths.length > 0) {
+        if (progress?.enabled) {
+          progress.start(
+            `Parsing FreeBuff ${renderBar(0)} 0/${formatNumber(freebuffDbPaths.length)} projects | buckets 0`,
+          );
+        }
+        try {
+          freebuffResult = await parseFreebuffIncremental({
+            dbPaths: freebuffDbPaths,
+            cursors,
+            queuePath,
+            onProgress: makeProviderProgress("FreeBuff Desktop"),
+          });
+        } catch (err) {
+          warnProviderParseFailure("FreeBuff Desktop", err, opts);
         }
       }
     }
@@ -3019,6 +3045,7 @@ async function cmdSync(argv, context = {}) {
       zedResult.recordsProcessed +
       gooseResult.recordsProcessed +
       dshResult.recordsProcessed +
+      freebuffResult.recordsProcessed +
       droidResult.recordsProcessed;
     const totalBuckets =
       parseResult.bucketsQueued +
@@ -3059,6 +3086,7 @@ async function cmdSync(argv, context = {}) {
       zedResult.bucketsQueued +
       gooseResult.bucketsQueued +
       dshResult.bucketsQueued +
+      freebuffResult.bucketsQueued +
       droidResult.bucketsQueued;
     const skipNoOpCursorCommit =
       opts.auto &&

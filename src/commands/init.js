@@ -73,6 +73,7 @@ const {
   resolveUnslothDbPath,
   resolveAnythingllmDbPath,
   resolveDevinDbPath,
+  resolveFreebuffDbPaths,
   resolveReasonixHome,
   resolveTraeStoragePath,
 } = require("../lib/rollout");
@@ -150,6 +151,7 @@ const SUPPORTED_PROVIDERS = [
   "LM Studio",
   "Unsloth Studio",
   "Devin CLI",
+  "FreeBuff Desktop",
 ];
 
 async function cmdInit(argv) {
@@ -925,6 +927,18 @@ async function applyIntegrationSetup({
         label: "Devin CLI",
         status: "detected",
         detail: "Passive reader (no hook needed)",
+      });
+    }
+  }
+
+  // FreeBuff Desktop: passive SQLite reader — no hook installation needed.
+  {
+    const freebuffDbPaths = resolveFreebuffDbPaths(process.env);
+    if (freebuffDbPaths.length > 0) {
+      summary.push({
+        label: "FreeBuff Desktop",
+        status: "detected",
+        detail: `Passive reader · ${freebuffDbPaths.length} project${freebuffDbPaths.length !== 1 ? "s" : ""}`,
       });
     }
   }

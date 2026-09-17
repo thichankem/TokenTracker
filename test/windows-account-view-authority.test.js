@@ -22,7 +22,7 @@ const repoRoot = path.join(__dirname, "..");
 const usagePoller = fs.readFileSync(
   path.join(repoRoot, "TokenTrackerWin/UsagePoller.cs"),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
 
 test("the write-only AccountViewActive flag is gone", () => {
   assert.doesNotMatch(

@@ -84,6 +84,7 @@ const {
   resolveClaudeScienceDbPaths,
   resolveAnythingllmDbPath,
   resolveDevinDbPath,
+  resolveFreebuffDbPaths,
   resolveGooseDbPath,
   listDroidSettingsFiles,
   resolveDroidSessionsDir,
@@ -717,6 +718,10 @@ async function cmdStatus(argv = []) {
   const devinDbPath = resolveDevinDbPath(process.env);
   const devinInstalled = Boolean(devinDbPath && fssync.existsSync(devinDbPath));
 
+  // FreeBuff Desktop — passive SQLite reader for desktop-v2.db
+  const freebuffDbPaths = resolveFreebuffDbPaths(process.env);
+  const freebuffInstalled = freebuffDbPaths.length > 0;
+
   // Trae SOLO (ByteDance AI IDE) — passive entitlement snapshot reader.
   const traeStoragePath = resolveTraeStoragePath(process.env);
   const traeInstalled = Boolean(traeStoragePath);
@@ -1062,6 +1067,9 @@ async function cmdStatus(argv = []) {
         devin: devinInstalled
           ? { installed: true, detail: devinDbPath }
           : { installed: false },
+        freebuff: freebuffInstalled
+          ? { installed: true, files: freebuffDbPaths.length, detail: "projects" }
+          : { installed: false },
         trae: traeInstalled
           ? {
               installed: true,
@@ -1253,6 +1261,9 @@ async function cmdStatus(argv = []) {
         : null,
       devinInstalled
         ? `- Devin CLI: passive reader (${devinDbPath})`
+        : null,
+      freebuffInstalled
+        ? `- FreeBuff Desktop: passive reader (${freebuffDbPaths.length} project${freebuffDbPaths.length !== 1 ? "s" : ""})`
         : null,
       traeInstalled
         // Deliberately NOT "passive reader": every other line with that wording

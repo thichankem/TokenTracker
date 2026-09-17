@@ -22061,4 +22061,267 @@ module.exports = {
   dshUsageToTotals,
   extractDshSessionUsage,
   parseDshIncremental,
+
+  // FreeBuff Desktop — passive SQLite reader for ~/.config/freebuff-desktop
+  resolveFreebuffDbPaths,
+  parseFreebuffIncremental,
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FreeBuff Desktop (codebuff.com/freebuff)
+//
+// Data: SQLite at ~/.config/freebuff-desktop/projects/<project>/desktop-v2.db
+//   Override: $TOKENTRACKER_FREEBUFF_HOME
+//
+// Each project directory contains a desktop-v2.db with a `messages` table.
+// Assistant messages carry `metrics_json` with usage breakdown:
+//   { usage: { inputTokens, cachedInputTokens, outputTokens,
+//              reasoningOutputTokens, totalTokens }, costUsd }
+// The `threads` table maps thread_id → model (e.g. "deepseek/deepseek-v4-flash").
+// Timestamps are milliseconds since epoch.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FREEBUFF_SOURCE = "freebuff";
+
+function resolveFreebuffHome(env = process.env) {
+  const override = typeof env.TOKENTRACKER_FREEBUFF_HOME === "string"
+    ? env.TOKENTRACKER_FREEBUFF_HOME.trim()
+    : "";
+  if (override) return path.resolve(override);
+  return path.join(env.HOME || env.USERPROFILE || os.homedir(), ".config", "freebuff-desktop");
+}
+
+function resolveFreebuffDbPaths(env = process.env) {
+  const home = resolveFreebuffHome(env);
+  const projectsDir = path.join(home, "projects");
+  if (!fssync.existsSync(projectsDir)) return [];
+  const paths = [];
+  let entries;
+  try {
+    entries = fssync.readdirSync(projectsDir, { withFileTypes: true });
+  } catch (_e) {
+    return [];
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const dbPath = path.join(projectsDir, entry.name, "desktop-v2.db");
+    if (fssync.existsSync(dbPath)) paths.push(dbPath);
+  }
+  return paths;
+}
+
+function freebuffFingerprint(dbPath) {
+  return sqliteSidecarFingerprint(dbPath);
+}
+
+function normalizeFreebuffModelName(raw) {
+  if (!raw || typeof raw !== "string") return "freebuff";
+  const trimmed = raw.trim();
+  if (!trimmed) return "freebuff";
+  const slashIdx = trimmed.indexOf("/");
+  if (slashIdx >= 0) {
+    const provider = trimmed.slice(0, slashIdx).trim().toLowerCase();
+    const model = trimmed.slice(slashIdx + 1).trim();
+    if (model) return `${provider}/${model}`;
+    return `freebuff/${trimmed}`;
+  }
+  return `freebuff/${trimmed}`;
+}
+
+function parseFreebuffMetricsJson(metricsJson) {
+  if (!metricsJson || typeof metricsJson !== "string") return null;
+  try {
+    const parsed = JSON.parse(metricsJson);
+    const usage = parsed?.usage;
+    if (!usage || typeof usage !== "object") return null;
+    return {
+      input_tokens: Number(usage.inputTokens || 0) || 0,
+      cached_input_tokens: Number(usage.cachedInputTokens || 0) || 0,
+      output_tokens: Number(usage.outputTokens || 0) || 0,
+      reasoning_output_tokens: Number(usage.reasoningOutputTokens || 0) || 0,
+      total_tokens: Number(usage.totalTokens || 0) || 0,
+    };
+  } catch (_e) {
+    return null;
+  }
+}
+
+function normalizeFreebuffTimestamp(ts) {
+  const n = Number(ts);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  // FreeBuff timestamps are milliseconds since epoch
+  if (n > 1e12) return toUtcHalfHourStart(n);
+  // Seconds since epoch
+  return toUtcHalfHourStart(n * 1000);
+}
+
+async function parseFreebuffIncremental({
+  dbPaths,
+  cursors,
+  queuePath,
+  onProgress,
+} = {}) {
+  await ensureDir(path.dirname(queuePath));
+  if (!cursors || typeof cursors !== "object") cursors = {};
+  if (!cursors.freebuff || typeof cursors.freebuff !== "object") cursors.freebuff = {};
+  const freebuffState = cursors.freebuff;
+  const storedDbState = freebuffState.dbs && typeof freebuffState.dbs === "object"
+    ? freebuffState.dbs
+    : {};
+  let dbState = { ...storedDbState };
+  const messages = freebuffState.messages && typeof freebuffState.messages === "object"
+    ? freebuffState.messages
+    : {};
+  const hourlyState = normalizeHourlyState(cursors?.hourly);
+  const touchedBuckets = new Set();
+  const cb = typeof onProgress === "function" ? onProgress : null;
+  let recordsProcessed = 0;
+  let eventsAggregated = 0;
+
+  const resolvedPaths = Array.isArray(dbPaths) ? dbPaths : resolveFreebuffDbPaths(process.env);
+  const presentDbs = new Set(resolvedPaths);
+  const total = resolvedPaths.length;
+  const readOptions = {
+    label: "FreeBuff Desktop",
+    maxBuffer: 32 * 1024 * 1024,
+    timeout: 30_000,
+    readOnly: true,
+    throwOnReadFailure: true,
+  };
+
+  for (let idx = 0; idx < resolvedPaths.length; idx++) {
+    const dbPath = resolvedPaths[idx];
+    const previousDb = dbState[dbPath];
+    let fingerprint;
+    try {
+      fingerprint = freebuffFingerprint(dbPath);
+    } catch (_e) {
+      continue;
+    }
+    const unchanged = previousDb
+      && previousDb.fingerprint
+      && fingerprint
+      && previousDb.fingerprint.ino === fingerprint.ino
+      && previousDb.fingerprint.size === fingerprint.size
+      && previousDb.fingerprint.mtimeMs === fingerprint.mtimeMs;
+    if (unchanged) {
+      if (cb) {
+        cb({
+          index: idx + 1,
+          total,
+          recordsProcessed,
+          eventsAggregated,
+          bucketsQueued: touchedBuckets.size,
+        });
+      }
+      continue;
+    }
+
+    // Read thread models first
+    let threadModels = {};
+    try {
+      const threadRows = readSqliteJsonRows(dbPath,
+        "SELECT id, model FROM threads WHERE model IS NOT NULL", readOptions);
+      for (const row of threadRows) {
+        if (row?.id && row?.model) threadModels[row.id] = row.model;
+      }
+    } catch (_e) {
+      // threads table may not exist in older DBs
+    }
+
+    // Read assistant messages with usage data
+    let rows = [];
+    try {
+      const afterSeq = previousDb?.lastSeq || 0;
+      rows = readSqliteJsonRows(dbPath,
+        `SELECT seq, thread_id, metrics_json, ts FROM messages
+         WHERE role = 'assistant'
+         AND metrics_json IS NOT NULL
+         AND metrics_json != '{}'
+         AND seq > ${Number(afterSeq) || 0}
+         ORDER BY seq`, readOptions);
+    } catch (_e) {
+      if (cb) {
+        cb({
+          index: idx + 1,
+          total,
+          recordsProcessed,
+          eventsAggregated,
+          bucketsQueued: touchedBuckets.size,
+        });
+      }
+      continue;
+    }
+
+    let lastSeq = previousDb?.lastSeq || 0;
+    for (const row of rows) {
+      recordsProcessed += 1;
+      const seq = Number(row.seq) || 0;
+      if (seq > lastSeq) lastSeq = seq;
+
+      const threadId = row.thread_id || "";
+      const threadModel = threadModels[threadId] || "freebuff";
+      const model = normalizeFreebuffModelName(threadModel);
+      const totals = parseFreebuffMetricsJson(row.metrics_json);
+      if (!totals) continue;
+
+      const bucketStart = normalizeFreebuffTimestamp(row.ts);
+      if (!bucketStart) continue;
+
+      const key = `freebuff:${seq}`;
+      const event = {
+        key,
+        model,
+        bucketStart,
+        totals: {
+          ...totals,
+          billable_total_tokens: totals.total_tokens,
+          total_cost_usd: 0,
+          conversation_count: 0,
+        },
+      };
+
+      if (reconcilePassiveUsageEvent({
+        event,
+        source: FREEBUFF_SOURCE,
+        messages,
+        hourlyState,
+        touchedBuckets,
+      })) eventsAggregated += 1;
+
+      if (cb) {
+        cb({
+          index: idx + 1,
+          total,
+          recordsProcessed,
+          eventsAggregated,
+          bucketsQueued: touchedBuckets.size,
+        });
+      }
+    }
+
+    dbState[dbPath] = {
+      fingerprint: fingerprint || previousDb?.fingerprint || null,
+      lastSeq,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  // Clean up messages for deleted DBs
+  for (const key of Object.keys(messages)) {
+    if (key.startsWith("freebuff:") && !presentDbs.has(key.split(":")[1])) {
+      delete messages[key];
+    }
+  }
+
+  const bucketsQueued = await enqueueTouchedBuckets({ queuePath, hourlyState, touchedBuckets });
+  const updatedAt = new Date().toISOString();
+  hourlyState.updatedAt = updatedAt;
+  cursors.hourly = hourlyState;
+  cursors.freebuff = {
+    dbs: dbState,
+    messages,
+    updatedAt,
+  };
+  return { recordsProcessed, eventsAggregated, bucketsQueued };
+}

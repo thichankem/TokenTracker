@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <rect width="120" height="120" rx="24" fill="#10B981"/>
+  <path d="M30 60c0-16.569 13.431-30 30-30s30 13.431 30 30-13.431 30-30 30-30-13.431-30-30z" fill="#fff" opacity="0.2"/>
+  <text x="60" y="68" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="700" font-size="28" fill="#fff">FB</text>
+</svg>
