@@ -226,7 +226,6 @@ final class DynamicIslandCompactPolicyTests: XCTestCase {
             "codex": ["configured": false],
             "cursor": ["configured": false],
             "gemini": ["configured": false],
-            "kiro": ["configured": false],
             "antigravity": ["configured": false],
         ]
         for (key, value) in overrides {

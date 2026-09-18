@@ -34,12 +34,14 @@
     "metal-fx": "^1.0.4",
     "motion": "^12.43.0",
     "posthog-js": "^1.427.2",
+    "qrcode-generator": "^1.5.2",
     "react": "^18.2.0",
     "react-day-picker": "^9.14.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.18.3",
     "tailwind-merge": "^3.6.0",
-    "three": "^0.185.1"
+    "three": "^0.185.1",
+    "tokentracker-cli": "file:.."
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.4.5",

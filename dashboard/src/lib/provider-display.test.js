@@ -5,6 +5,8 @@ describe("formatProviderDisplayName", () => {
   it.each([
     ["lmstudio", "LM Studio"],
     ["unsloth", "Unsloth Studio"],
+    ["minimax", "MiniMax"],
+    ["MiniMax", "MiniMax"],
   ])("formats %s with its product casing", (value, expected) => {
     expect(formatProviderDisplayName(value)).toBe(expected);
   });

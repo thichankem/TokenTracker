@@ -224,11 +224,6 @@ const MODEL_PRICING: Record<string, { input: number; output: number; cache_read:
   "grok-4-fast-reasoning": { input: 0.20, output: 0.50, cache_read: 0.05 },
   "grok-4-fast-non-reasoning": { input: 0.20, output: 0.50, cache_read: 0.05 },
   "grok-4-1-fast-non-reasoning": { input: 0.20, output: 0.50, cache_read: 0.05 },
-  // ── AWS Kiro (mirrored byte-for-byte from src/lib/local-api.js to
-  //    prevent cloud/local cost drift — Kiro routes through Bedrock,
-  //    most commonly claude-sonnet-4). ──
-  "kiro-agent": { input: 3, output: 15, cache_read: 0.3, cache_write: 3.75 },
-  "kiro-cli-agent": { input: 3, output: 15, cache_read: 0.3, cache_write: 3.75 },
   // ── Tencent CodeBuddy / WorkBuddy (hy3-preview family). Tencent TokenHub
   //    official rate: 1.2 / 0.4 (cache hit) / 4.0 RMB per MTok in/read/out,
   //    converted at ~7.2 RMB/USD. DeepSeek-style cache: cache_write = input. ──
@@ -437,7 +432,6 @@ function getModelPricing(model: string, source = "") {
   if (lower.includes("glm-5.2")) return MODEL_PRICING["glm-5.2"];
   if (lower.includes("glm-5.1")) return MODEL_PRICING["glm-5.1"];
   if (lower.includes("glm-5")) return MODEL_PRICING["glm-5"];
-  if (lower.includes("kiro")) return MODEL_PRICING["kiro-cli-agent"];
   if (lower.includes("hy3")) return MODEL_PRICING["hy3-preview-agent"];
   if (lower.includes("composer")) return MODEL_PRICING["composer-1"];
   if (lower.includes("fugu")) return MODEL_PRICING["sakana/fugu-ultra"];
@@ -540,7 +534,7 @@ function computeRowCost(row: UsageRow): number {
 /** Map raw `source` to the canonical bucket used by the modal's by_provider list. */
 const KNOWN_SOURCES = new Set([
   "acode", "codex", "claude", "gemini", "cursor", "opencode", "openclaw",
-  "hermes", "kiro", "copilot", "pi-anthropic", "pi-github-copilot",
+  "hermes", "copilot", "pi-anthropic", "pi-github-copilot",
   "pi-copilot", "kimi", "droid",
 ]);
 function canonicalSource(s: string) {

@@ -99,7 +99,7 @@ final class UsageLimitsRetentionTests: XCTestCase {
     func testUsableProviderAmongErroredOnesIsStillUsable() throws {
         let response = try decodeResponse(overrides: [
             "claude": ["configured": true, "error": "401 unauthorized"],
-            "kiro": ["configured": true],
+            "cursor": ["configured": true],
         ])
 
         XCTAssertTrue(response.hasAnyProviderWithoutError)
@@ -416,7 +416,6 @@ final class UsageLimitsRetentionTests: XCTestCase {
             "codex": ["configured": false],
             "cursor": ["configured": false],
             "gemini": ["configured": false],
-            "kiro": ["configured": false],
             "antigravity": ["configured": false],
         ]
         for (key, value) in overrides { payload[key] = value }

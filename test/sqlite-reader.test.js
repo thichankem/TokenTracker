@@ -120,7 +120,7 @@ test("readSqliteJsonRows includes low-level errors in debug mode", () => {
   let stderr = "";
 
   readSqliteJsonRows(dbPath, "SELECT 1", {
-    label: "Kiro CLI",
+    label: "Test Provider",
     env: { TOKENTRACKER_DEBUG: "1" },
     stderr: { write(chunk) { stderr += chunk; } },
     execFileSync() {

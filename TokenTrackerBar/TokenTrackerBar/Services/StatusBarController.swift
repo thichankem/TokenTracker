@@ -502,10 +502,6 @@ final class StatusBarController: NSObject {
                 return genericLimitValue(id: id, metric: metric, configured: viewModel.usageLimits?.kimi?.configured, error: viewModel.usageLimits?.kimi?.error, window: viewModel.usageLimits?.kimi?.secondaryWindow)
             case .kimiTotal:
                 return genericLimitValue(id: id, metric: metric, configured: viewModel.usageLimits?.kimi?.configured, error: viewModel.usageLimits?.kimi?.error, window: viewModel.usageLimits?.kimi?.tertiaryWindow)
-            case .kiroMonth:
-                return genericLimitValue(id: id, metric: metric, configured: viewModel.usageLimits?.kiro.configured, error: viewModel.usageLimits?.kiro.error, window: viewModel.usageLimits?.kiro.primaryWindow)
-            case .kiroBonus:
-                return genericLimitValue(id: id, metric: metric, configured: viewModel.usageLimits?.kiro.configured, error: viewModel.usageLimits?.kiro.error, window: viewModel.usageLimits?.kiro.secondaryWindow)
             case .grokMonth:
                 return genericLimitValue(id: id, metric: metric, configured: viewModel.usageLimits?.grok?.configured, error: viewModel.usageLimits?.grok?.error, window: viewModel.usageLimits?.grok?.primaryWindow)
             case .grokOndemand:

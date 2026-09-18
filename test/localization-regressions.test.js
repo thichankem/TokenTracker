@@ -69,7 +69,6 @@ test("native macOS strings are wired through the Swift localization helpers", ()
   assert.ok(dateHelpers.includes("return Strings.periodTotalLabel"));
   assert.ok(!dateHelpers.includes('NativeLocalization.usesChinese ? "日" : "Day"'));
 
-  assert.ok(usageLimitsView.includes("Strings.kiroBonusLabel"));
   assert.ok(usageLimitsView.includes("Strings.grokPrimaryLabel"));
   assert.ok(usageLimitsView.includes('case "grok"'));
   assert.ok(usageLimitsView.includes("Strings.limitResetNow"));

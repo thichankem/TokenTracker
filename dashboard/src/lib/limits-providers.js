@@ -7,7 +7,6 @@ export const LIMIT_PROVIDER_IDS = [
   "cursor",
   "gemini",
   "kimi",
-  "kiro",
   "grok",
   "copilot",
   "antigravity",
@@ -28,7 +27,6 @@ export const LIMIT_PROVIDER_ICON_KEYS = {
   cursor: "CURSOR",
   gemini: "GEMINI",
   kimi: "KIMI",
-  kiro: "KIRO",
   grok: "GROK",
   copilot: "COPILOT",
   antigravity: "ANTIGRAVITY",
@@ -67,8 +65,6 @@ export function limitProviderName(id) {
       return copy("limits.provider.gemini");
     case "kimi":
       return copy("limits.provider.kimi");
-    case "kiro":
-      return copy("limits.provider.kiro");
     case "grok":
       return copy("limits.provider.grok");
     case "copilot":

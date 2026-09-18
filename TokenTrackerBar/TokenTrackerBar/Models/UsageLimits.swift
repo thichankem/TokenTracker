@@ -7,7 +7,6 @@ struct UsageLimitsResponse: Codable, Equatable {
     let cursor: CursorLimits
     let gemini: GeminiLimits
     let kimi: KimiLimits?
-    let kiro: KiroLimits
     let grok: GrokLimits?
     let antigravity: AntigravityLimits
     let copilot: CopilotLimits?
@@ -22,7 +21,7 @@ struct UsageLimitsResponse: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case fetchedAt = "fetched_at"
-        case claude, codex, cursor, gemini, kimi, kiro, grok, antigravity, copilot, zcode, qoder, qoderCn, codingPlan, agentPlan, devin
+        case claude, codex, cursor, gemini, kimi, grok, antigravity, copilot, zcode, qoder, qoderCn, codingPlan, agentPlan, devin
         case opencodeGo = "opencodeGo"
         case commandCode = "commandCode"
     }
@@ -74,10 +73,6 @@ extension UsageLimitsResponse {
             return guarded(kimi?.configured, kimi?.error, kimi?.secondaryWindow?.usedPercent)
         case .kimiTotal:
             return guarded(kimi?.configured, kimi?.error, kimi?.tertiaryWindow?.usedPercent)
-        case .kiroMonth:
-            return guarded(kiro.configured, kiro.error, kiro.primaryWindow?.usedPercent)
-        case .kiroBonus:
-            return guarded(kiro.configured, kiro.error, kiro.secondaryWindow?.usedPercent)
         case .grokMonth:
             return guarded(grok?.configured, grok?.error, grok?.primaryWindow?.usedPercent)
         case .grokOndemand:
@@ -411,23 +406,6 @@ struct KimiLimits: Codable, Equatable {
     }
 }
 
-struct KiroLimits: Codable, Equatable {
-    let configured: Bool
-    let error: String?
-    let planLabel: String?
-    let planName: String?
-    let primaryWindow: GenericLimitWindow?
-    let secondaryWindow: GenericLimitWindow?
-
-    enum CodingKeys: String, CodingKey {
-        case configured, error
-        case planLabel = "plan_label"
-        case planName = "plan_name"
-        case primaryWindow = "primary_window"
-        case secondaryWindow = "secondary_window"
-    }
-}
-
 struct GeminiLimits: Codable, Equatable {
     let configured: Bool
     let error: String?
@@ -659,7 +637,6 @@ extension UsageLimitsResponse {
             (cursor.configured, cursor.error),
             (gemini.configured, gemini.error),
             (kimi?.configured ?? false, kimi?.error),
-            (kiro.configured, kiro.error),
             (grok?.configured ?? false, grok?.error),
             (antigravity.configured, antigravity.error),
             (copilot?.configured ?? false, copilot?.error),
@@ -698,7 +675,6 @@ extension UsageLimitsResponse {
             cursor: cursor,
             gemini: gemini,
             kimi: kimi,
-            kiro: kiro,
             grok: grok,
             antigravity: antigravity,
             copilot: copilot,

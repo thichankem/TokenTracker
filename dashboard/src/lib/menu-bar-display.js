@@ -26,8 +26,6 @@ export const FALLBACK_MENU_BAR_ITEMS = [
   { id: "kimiWeekly", label: "Kimi Weekly Limit", shortLabel: "Km Wk", category: "limits" },
   { id: "kimi5h", label: "Kimi 5h Limit", shortLabel: "Km 5h", category: "limits" },
   { id: "kimiTotal", label: "Kimi Total Limit", shortLabel: "Km Tot", category: "limits" },
-  { id: "kiroMonth", label: "Kiro Monthly Limit", shortLabel: "Kr Mo", category: "limits" },
-  { id: "kiroBonus", label: "Kiro Bonus Limit", shortLabel: "Kr Bn", category: "limits" },
   { id: "copilotPremium", label: "Copilot Premium Limit", shortLabel: "Co Prem", category: "limits" },
   { id: "copilotChat", label: "Copilot Chat Limit", shortLabel: "Co Chat", category: "limits" },
   { id: "antigravityClaudeWeekly", label: "Antigravity Claude 7d Limit", shortLabel: "Ag Cl 7d", category: "limits" },

@@ -30,7 +30,6 @@ enum LimitResetProviderIconCatalog {
         switch provider {
         case "cursor": return "cursor.svg"
         case "kimi": return "kimi.svg"
-        case "kiro": return "kiro.svg"
         case "grok": return "grok.svg"
         case "copilot": return "copilot.svg"
         case "zcode": return "zcode.svg"
@@ -54,7 +53,7 @@ enum LimitResetProviderIconCatalog {
 struct WeeklyLimitResetDetector {
 
     /// A real rollover must drop usage by at least this much — a small floor that
-    /// confirms the window actually emptied, and guards providers (e.g. Kiro) whose
+    /// confirms the window actually emptied, and guards providers whose
     /// `reset_at` slides forward continuously instead of jumping only on rollover.
     /// Not a "used enough to celebrate" gate: any genuine reset fires.
     var minDrop: Double = 5
@@ -112,7 +111,7 @@ struct WeeklyLimitResetDetector {
             // The window must have actually rolled over: its reset_at advanced to a
             // new period, not merely a percentage that dipped.
             guard curReset > prevReset + resetAdvanceTolerance else { continue }
-            // … and the rollover actually emptied the window (also guards Kiro's
+            // … and the rollover actually emptied the window (also guards
             // continuously-sliding reset_at from firing without a real drop).
             guard prevPercent - reading.usedPercent >= minDrop else { continue }
             if let last = snapshot.lastEventAt[key], now - last < cooldown { continue }
@@ -229,7 +228,6 @@ extension UsageLimitsResponse {
 
         addGeneric("cursor", cursor.configured, cursor.error, [("primary", Strings.cursorPlanLabel, cursor.primaryWindow), ("secondary", Strings.cursorAutoLabel, cursor.secondaryWindow), ("tertiary", "API", cursor.tertiaryWindow), ("quaternary", Strings.cursorGrokBotLabel, cursor.quaternaryWindow)])
         addGeneric("gemini", gemini.configured, gemini.error, [("primary", "Pro", gemini.primaryWindow), ("secondary", "Flash", gemini.secondaryWindow), ("tertiary", "Lite", gemini.tertiaryWindow)])
-        addGeneric("kiro", kiro.configured, kiro.error, [("primary", Strings.kiroMonthLabel, kiro.primaryWindow), ("secondary", Strings.kiroBonusLabel, kiro.secondaryWindow)])
         addGeneric("antigravity", antigravity.configured, antigravity.error, [("primary", "Claude 7d", antigravity.primaryWindow), ("secondary", "Claude 5h", antigravity.secondaryWindow), ("tertiary", "Gemini 7d", antigravity.tertiaryWindow), ("quaternary", "Gemini 5h", antigravity.quaternaryWindow)])
         if let kimi { addGeneric("kimi", kimi.configured, kimi.error, [("primary", Strings.kimiWeeklyLabel, kimi.primaryWindow), ("secondary", Strings.kimiFiveHourLabel, kimi.secondaryWindow), ("tertiary", Strings.kimiTotalLabel, kimi.tertiaryWindow)]) }
         if let grok { addGeneric("grok", grok.configured, grok.error, [("primary", Strings.grokPrimaryLabel(periodType: grok.periodType), grok.primaryWindow), ("secondary", Strings.grokOndemandLabel, grok.secondaryWindow)]) }

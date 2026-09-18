@@ -119,7 +119,6 @@ const SUPPORTED_PROVIDERS = [
   "Cursor",
   "Gemini CLI",
   "Antigravity",
-  "Kiro",
   "OpenCode",
   "OpenClaw",
   "Every Code",

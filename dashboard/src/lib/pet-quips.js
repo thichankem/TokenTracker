@@ -304,7 +304,6 @@ const PET_LIMIT_PROVIDER_NAMES = {
   cursor: "Cursor",
   gemini: "Gemini",
   kimi: "Kimi",
-  kiro: "Kiro",
   grok: "Grok",
   copilot: "GitHub Copilot",
   antigravity: "Antigravity",
@@ -396,7 +395,6 @@ function collectPetLimitRows(limits) {
   addGeneric("cursor", limits.cursor, [["Plan", limits.cursor?.primary_window], ["Auto", limits.cursor?.secondary_window], ["API", limits.cursor?.tertiary_window]]);
   addGeneric("gemini", limits.gemini, [["Pro", limits.gemini?.primary_window], ["Flash", limits.gemini?.secondary_window], ["Lite", limits.gemini?.tertiary_window]]);
   addGeneric("kimi", limits.kimi, [["Weekly", limits.kimi?.primary_window], ["5h", limits.kimi?.secondary_window], ["Total", limits.kimi?.tertiary_window]]);
-  addGeneric("kiro", limits.kiro, [["Month", limits.kiro?.primary_window], ["Bonus", limits.kiro?.secondary_window]]);
   addGeneric("grok", limits.grok, [["Month", limits.grok?.primary_window], ["On-demand", limits.grok?.secondary_window]]);
   addGeneric("copilot", limits.copilot, [["Premium", limits.copilot?.primary_window], ["Chat", limits.copilot?.secondary_window]]);
   addGeneric("antigravity", limits.antigravity, [

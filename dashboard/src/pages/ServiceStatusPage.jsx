@@ -14,7 +14,7 @@ import { ProviderIcon } from "../ui/dashboard/components/ProviderIcon.jsx";
 //                (covers Gemini; Google products share one feed)
 //
 // Providers deliberately absent: Grok + DeepSeek front their status pages
-// with bot checks (browser fetch gets 403/HTML), and z.ai / Kiro / Qoder /
+// with bot checks (browser fetch gets 403/HTML), and z.ai / Qoder /
 // OpenCode expose no public status API at all. Only providers TokenTracker
 // actually tracks belong here — this page explains "why is MY provider's
 // data red", it is not a general status aggregator.

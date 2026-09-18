@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "note": "Curated price overrides. Always wins over LiteLLM. Two reasons to live here: (1) self-defined alias names that LiteLLM will never carry (kiro-*, hy3-*, composer-*, kimi-for-coding, free-tier OpenRouter routes); (2) prices we want to pin even if LiteLLM has the model (e.g. cache_write fields LiteLLM often omits). Units: USD per million tokens. Edit this file to override pricing without redeploying.",
+    "note": "Curated price overrides. Always wins over LiteLLM. Two reasons to live here: (1) self-defined alias names that LiteLLM will never carry (hy3-*, composer-*, kimi-for-coding, free-tier OpenRouter routes); (2) prices we want to pin even if LiteLLM has the model (e.g. cache_write fields LiteLLM often omits). Units: USD per million tokens. Edit this file to override pricing without redeploying.",
     "units": "usd_per_million_tokens",
     "deepseek_v4_pricing_note": "Official DeepSeek V4 pricing verified on 2026-08-21. Peak hours are 01:00-04:00 and 06:00-10:00 UTC; all other hours are off-peak at half price. Exact entries store peak rates. computeRowCost applies the time-of-use discount from each row's UTC hour_start.",
     "iflytek_maas_pricing_note": "iFlytek MaaS inference prices supplied for AStudio on 2026-08-31. AStudio homepage: https://agent.xfyun.cn/. Official pricing source: https://maas.xfyun.cn/modelSquare. Source values are RMB per million tokens, converted at 7.2 RMB/USD, then rounded to two decimal places for billing. Models without a dedicated cache-hit price use the normal input rate; cache writes also use the normal input rate. iFlytek MaaS prices are source-scoped and do not inherit DeepSeek time-of-use discounts."
@@ -76,18 +76,6 @@
       "cache_read": 0.02,
       "cache_write": 0.25,
       "note": "GPT-5.6 lightweight tier. Official short-context rates: $0.20/$1.20 per MTok (previous curated values $1/$6 overcounted 5x). See gpt-5.6-sol."
-    },
-    "kiro-agent": {
-      "input": 3,
-      "output": 15,
-      "cache_read": 0.3,
-      "cache_write": 3.75
-    },
-    "kiro-cli-agent": {
-      "input": 3,
-      "output": 15,
-      "cache_read": 0.3,
-      "cache_write": 3.75
     },
     "hy3-preview-agent": {
       "input": 0.167,
@@ -507,10 +495,6 @@
     {
       "match": "gpt-5.6",
       "ref": "gpt-5.6-sol"
-    },
-    {
-      "match": "kiro",
-      "ref": "kiro-cli-agent"
     },
     {
       "match": "hy3",

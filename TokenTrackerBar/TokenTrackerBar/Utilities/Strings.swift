@@ -70,8 +70,6 @@ enum Strings {
     static var kimiWeeklyLabel: String { t("Weekly", "周", "周", "週間", "주간") }
     static var kimiFiveHourLabel: String { t("5h", "5h", "5h", "5h", "5h") }
     static var kimiTotalLabel: String { t("Total", "总量", "總量", "合計", "총량") }
-    static var kiroMonthLabel: String { t("Month", "本月", "本月", "今月", "이번 달") }
-    static var kiroBonusLabel: String { t("Bonus", "奖励", "獎勵", "ボーナス", "보너스") }
     // Qoder / Qoder CN plan and bonus windows — shared by the menu-bar panel
     // (UsageLimitsView) and the reset notification detector so both surfaces
     // render the same label.

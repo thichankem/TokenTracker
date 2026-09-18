@@ -15,8 +15,6 @@ const {
   normalizeCursorSandUsageStatus,
   normalizeGeminiQuotaResponse,
   normalizeKimiUsageResponse,
-  parseKiroUsageOutput,
-  fetchKiroLimits,
   runCommand,
   resetUsageLimitsCache,
   normalizeAntigravityResponse,
@@ -2862,212 +2860,6 @@ describe("normalizeCursorSandUsageStatus", () => {
   });
 });
 
-describe("parseKiroUsageOutput", () => {
-  const now = new Date("2026-04-03T00:00:00.000Z");
-
-  it("parses legacy usage output with bonus credits", () => {
-    const output = `
-\u001b[32m┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓\u001b[0m
-┃                                                          | KIRO FREE      ┃
-┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
-┃ Monthly credits:                                                          ┃
-┃ ████████████████████████████████████████████████████████ 100% (resets on 01/01) ┃
-┃                              (0.00 of 50 covered in plan)                 ┃
-┃ Bonus credits:                                                            ┃
-┃ 0.00/100 credits used, expires in 88 days                                 ┃
-┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛`;
-
-    const result = parseKiroUsageOutput(output, { now });
-
-    assert.equal(result.plan_name, "KIRO FREE");
-    assert.equal(result.primary_window.used_percent, 100);
-    assert.equal(result.primary_window.reset_at, "2027-01-01T00:00:00.000Z");
-    assert.equal(result.secondary_window.used_percent, 0);
-    assert.ok(result.secondary_window.reset_at.startsWith("2026-06-30T"));
-  });
-
-  it("parses managed plan output without usage metrics", () => {
-    const output = `
-Plan: Q Developer Pro
-Usage is managed by organization admin.
-`;
-
-    const result = parseKiroUsageOutput(output, { now });
-
-    assert.equal(result.plan_name, "Q Developer Pro");
-    assert.equal(result.primary_window.used_percent, 0);
-    assert.equal(result.primary_window.reset_at, null);
-    assert.equal(result.secondary_window, null);
-  });
-});
-
-describe("fetchKiroLimits", () => {
-  const now = new Date("2026-07-25T00:00:00.000Z");
-  const usageOutput = `
-Estimated Usage | resets on 2026-08-01 | KIRO PRO
-████████████ 25%
-(25 of 100 covered in plan)
-`;
-
-  it("uses a PTY first for kiro-cli 2.13 so /usage is not sent as a model prompt", async () => {
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tokentracker-kiro-credits-"));
-    const calls = [];
-    try {
-      const trackerDir = path.join(tmp, ".tokentracker", "tracker");
-      fs.mkdirSync(trackerDir, { recursive: true });
-      fs.writeFileSync(
-        path.join(trackerDir, "kiro-credits.json"),
-        JSON.stringify({
-          version: 1,
-          total_credits: 1796.45,
-          record_count: 193,
-          session_count: 19,
-          file_count: 19,
-          latest_at: "2026-07-22T15:28:20.659Z",
-          updated_at: "2026-07-25T00:00:00.000Z",
-        }),
-      );
-      const commandRunner = (command, args) => {
-        calls.push({ command, args });
-        if (command === "which") {
-          return { status: 0, stdout: "/opt/kiro-cli\n", stderr: "" };
-        }
-        if (command === "/opt/kiro-cli" && args[0] === "--version") {
-          return {
-            status: 0,
-            stdout: "kiro-cli 2.13.0\n",
-            stderr: "",
-          };
-        }
-        if (command === "/usr/bin/script") {
-          assert.deepEqual(args, [
-            "-q",
-            "/dev/null",
-            "/opt/kiro-cli",
-            "chat",
-            "--no-interactive",
-            "/usage",
-          ]);
-          return { status: 0, stdout: usageOutput, stderr: "" };
-        }
-        throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
-      };
-
-      const result = await fetchKiroLimits({
-        commandRunner,
-        now,
-        platform: "darwin",
-        home: tmp,
-      });
-
-      assert.equal(result.error, null);
-      assert.equal(result.plan_name, "KIRO PRO");
-      assert.equal(result.primary_window.used_percent, 25);
-      assert.equal(
-        result.primary_window.reset_at,
-        "2026-08-01T00:00:00.000Z",
-      );
-      assert.equal(result.tracked_credits, 1796.45);
-      assert.equal(result.tracked_credit_records, 193);
-      assert.equal(result.tracked_credit_sessions, 19);
-      assert.equal(result.tracked_credits_latest_at, "2026-07-22T15:28:20.659Z");
-      assert.equal(
-        calls.some(
-          ({ command, args }) =>
-            command === "/opt/kiro-cli" && args[0] === "chat",
-        ),
-        false,
-        "2.13 must not run the unsafe pipe transport",
-      );
-    } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
-    }
-  });
-
-  it("falls back from unparseable pipe output to the PTY on older Kiro versions", async () => {
-    const calls = [];
-    const commandRunner = (command, args) => {
-      calls.push({ command, args });
-      if (command === "which") {
-        return { status: 0, stdout: "/opt/kiro-cli\n", stderr: "" };
-      }
-      if (command === "/opt/kiro-cli" && args[0] === "--version") {
-        return {
-          status: 0,
-          stdout: "kiro-cli 2.12.3\n",
-          stderr: "",
-        };
-      }
-      if (command === "/opt/kiro-cli" && args[0] === "chat") {
-        return {
-          status: 0,
-          stdout: "What would you like to work on?",
-          stderr: "[INFO] MCP subsystem initialized",
-        };
-      }
-      if (command === "/usr/bin/script") {
-        return { status: 0, stdout: usageOutput, stderr: "" };
-      }
-      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
-    };
-
-    const result = await fetchKiroLimits({
-      commandRunner,
-      now,
-      platform: "darwin",
-    });
-
-    assert.equal(result.error, null);
-    assert.equal(result.plan_name, "KIRO PRO");
-    assert.equal(
-      calls.filter(
-        ({ command, args }) =>
-          command === "/opt/kiro-cli" && args[0] === "chat",
-      ).length,
-      1,
-    );
-    assert.equal(
-      calls.filter(({ command }) => command === "/usr/bin/script").length,
-      1,
-    );
-  });
-
-  it("keeps local usage_summary credits visible when kiro-cli is unavailable", async () => {
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tokentracker-kiro-local-credits-"));
-    try {
-      const trackerDir = path.join(tmp, ".tokentracker", "tracker");
-      fs.mkdirSync(trackerDir, { recursive: true });
-      fs.writeFileSync(
-        path.join(trackerDir, "kiro-credits.json"),
-        JSON.stringify({
-          version: 1,
-          total_credits: 12.75,
-          record_count: 4,
-          session_count: 2,
-          latest_at: "2026-07-22T15:28:20.659Z",
-          updated_at: "2026-07-25T00:00:00.000Z",
-        }),
-      );
-
-      const result = await fetchKiroLimits({
-        home: tmp,
-        commandRunner(command, args) {
-          assert.equal(command, "which");
-          assert.deepEqual(args, ["kiro-cli"]);
-          return { status: 1, stdout: "", stderr: "" };
-        },
-      });
-
-      assert.equal(result.configured, true);
-      assert.equal(result.error, null);
-      assert.equal(result.tracked_credits, 12.75);
-      assert.equal(result.tracked_credit_records, 4);
-      assert.equal(result.tracked_credit_sessions, 2);
-    } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
-    }
-  });
-});
 
 describe("runCommand completion", () => {
   it("terminates a process group shortly after complete output arrives", async () => {
@@ -4450,7 +4242,7 @@ describe("normalizePlanLabel", () => {
   });
 
   it("strips a leading brand word and Title-cases the rest", () => {
-    assert.equal(normalizePlanLabel("KIRO PROFESSIONAL", "Kiro"), "Professional");
+    assert.equal(normalizePlanLabel("CURSOR PROFESSIONAL", "Cursor"), "Professional");
   });
 
   it("Title-cases a lowercase tier", () => {
@@ -4466,7 +4258,7 @@ describe("normalizePlanLabel", () => {
   });
 
   it("returns null when the tier is just the brand placeholder", () => {
-    assert.equal(normalizePlanLabel("Kiro", "Kiro"), null);
+    assert.equal(normalizePlanLabel("Cursor", "Cursor"), null);
   });
 });
 

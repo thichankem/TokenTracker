@@ -1557,9 +1557,6 @@ struct ClawdCompanionView: View {
                 (Strings.kimiWeeklyLabel, kimi.primaryWindow), (Strings.kimiFiveHourLabel, kimi.secondaryWindow), (Strings.kimiTotalLabel, kimi.tertiaryWindow)
             ])
         }
-        generic("kiro", configured: limits.kiro.configured, error: limits.kiro.error, windows: [
-            (Strings.kiroMonthLabel, limits.kiro.primaryWindow), (Strings.kiroBonusLabel, limits.kiro.secondaryWindow)
-        ])
         if let grok = limits.grok {
             generic("grok", configured: grok.configured, error: grok.error, windows: [
                 (Strings.grokPrimaryLabel(periodType: grok.periodType), grok.primaryWindow), (Strings.grokOndemandLabel, grok.secondaryWindow)

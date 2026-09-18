@@ -10,9 +10,11 @@ const os = require("node:os");
 const curatedOverrides = require("./curated-overrides.json");
 const {
   lookupPricing,
+  lookupOpenRouterPricing,
   buildLitellmPerMillionMap,
 } = require("./matcher");
 const { loadLitellmData } = require("./litellm-fetcher");
+const { loadOpenRouterData } = require("./openrouter-fetcher");
 
 const ZERO_PRICING = { input: 0, output: 0, cache_read: 0, cache_write: 0 };
 const PI_SUBSCRIPTION_SOURCES = new Set([
@@ -58,6 +60,7 @@ const state = {
   revision: 0,
   litellmRawMap: seedRaw, // raw per-token; field shape from LiteLLM JSON
   litellmPerMillionMap: buildLitellmPerMillionMap(seedRaw), // USD/MTok
+  openRouterPerMillionMap: {}, // USD/MTok, keyed by provider-qualified id
   source: Object.keys(seedRaw).length ? "seed-snapshot:sync" : null,
   // negativeCache prevents re-walking the LiteLLM map for models we've already
   // determined are unknown. Cleared on every reload.
@@ -66,6 +69,10 @@ const state = {
 
 function defaultCachePath() {
   return path.join(os.homedir(), ".tokentracker", "cache", "pricing.json");
+}
+
+function defaultOpenRouterCachePath() {
+  return path.join(os.homedir(), ".tokentracker", "cache", "openrouter-pricing.json");
 }
 
 async function ensurePricingLoaded(opts = {}) {
@@ -79,6 +86,26 @@ async function ensurePricingLoaded(opts = {}) {
       state.litellmRawMap = data || {};
       state.litellmPerMillionMap = buildLitellmPerMillionMap(state.litellmRawMap);
       state.source = source;
+      // OpenRouter is a supplementary source: its own per-model prices are
+      // merged over LiteLLM for overlapping keys and added for models LiteLLM
+      // misses. The raw-model pre-check in getModelPricing() additionally lets
+      // a source normalizer (e.g. antigravity collapsing gemini-3.8-flash ->
+      // gemini-2.5-flash) still resolve to the model's real OpenRouter price.
+      //
+      // Isolation: when a litellm `fetchImpl` was injected (tests) we must not
+      // hit the network for OpenRouter either — only an explicit
+      // `openRouterFetchImpl`/`openRouterCachePath` opts in. Production callers
+      // pass neither, so the real OpenRouter catalog is fetched/cached next to
+      // the LiteLLM cache.
+      const orCachePath =
+        opts.openRouterCachePath ||
+        (opts.cachePath
+          ? path.join(path.dirname(opts.cachePath), "openrouter-pricing.json")
+          : defaultOpenRouterCachePath());
+      const orFetchImpl = opts.openRouterFetchImpl || (opts.fetchImpl ? null : undefined);
+      const or = await loadOpenRouterData({ ...opts, cachePath: orCachePath, fetchImpl: orFetchImpl });
+      state.openRouterPerMillionMap = or.data || {};
+      Object.assign(state.litellmPerMillionMap, state.openRouterPerMillionMap);
       state.loaded = true;
       state.revision += 1;
       state.negativeCache.clear();
@@ -98,6 +125,7 @@ function resetPricingForTests() {
   state.loadingPromise = null;
   state.litellmRawMap = seedRaw;
   state.litellmPerMillionMap = buildLitellmPerMillionMap(seedRaw);
+  state.openRouterPerMillionMap = {};
   state.source = Object.keys(seedRaw).length ? "seed-snapshot:sync" : null;
   state.revision += 1;
   state.negativeCache.clear();
@@ -117,6 +145,14 @@ function getModelPricing(model, opts = {}) {
   }
   const cacheKey = lookupSource ? `${lookupSource}\0${model}` : model;
   if (state.negativeCache.has(cacheKey)) return ZERO_PRICING;
+
+  // OpenRouter pre-check on the RAW model, before source normalizers collapse
+  // it. This is what lets `gemini-3.8-flash` (antigravity) resolve to OpenRouter's
+  // `google/gemini-3.8-flash` real price instead of the gemini-2.5-flash guess.
+  if (state.openRouterPerMillionMap && Object.keys(state.openRouterPerMillionMap).length) {
+    const orHit = lookupOpenRouterPricing(model, state.openRouterPerMillionMap);
+    if (orHit.hit) return orHit.value;
+  }
 
   const result = lookupPricing(model, {
     curated: curatedOverrides,
@@ -304,12 +340,11 @@ function computeRowCost(row) {
   return baseCost + longContextPremium + priorityPremium;
 }
 
-// Backwards-compatible MODEL_PRICING export. Test at
-// test/model-breakdown.test.js:236 reads `localApi.MODEL_PRICING["kiro-agent"]`
-// and expects { input, output, cache_read, cache_write } shape. We expose the
-// CURATED.exact map (which contains the kiro entries by design); LiteLLM
-// entries are NOT included here because they're keyed dynamically and the old
-// table was authoritative for what is now CURATED.
+// Backwards-compatible MODEL_PRICING export. Exposes the CURATED.exact map
+// (self-defined aliases like hy3-*, composer-*) with { input, output,
+// cache_read, cache_write } shape. LiteLLM entries are NOT included here
+// because they're keyed dynamically and the old table was authoritative for
+// what is now CURATED.
 const MODEL_PRICING = curatedOverrides.exact;
 
 module.exports = {

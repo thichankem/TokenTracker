@@ -577,23 +577,6 @@ function renderProviderExtra(kind, data) {
   if (kind === "kimi_parallel" && data.parallel_limit) {
     return <StatusLine>{copy("limits.label.kimi_parallel", { count: data.parallel_limit })}</StatusLine>;
   }
-  if (
-    kind === "kiro_credits" &&
-    Number.isFinite(Number(data.tracked_credits)) &&
-    Number(data.tracked_credit_records) > 0
-  ) {
-    const credits = formatCreditAmount(data.tracked_credits, {
-      maximumFractionDigits: 2,
-    });
-    return (
-      <StatusLine>
-        {copy("limits.label.kiro_tracked_credits", {
-          credits,
-          count: Number(data.tracked_credit_records),
-        })}
-      </StatusLine>
-    );
-  }
   if (kind === "copilot_otel" && !data.otel_has_files && !data.otel_enabled) {
     return <CopilotOtelHint defaultDir={data.otel_default_dir} />;
   }
@@ -693,9 +676,6 @@ function renderProviderGroup(id, data, mode, expanded, onToggle, subscription = 
       id,
       <>
         <StatusLine tone="error">{copy("shared.error.prefix", { error: data.error })}</StatusLine>
-        {id === "kiro"
-          ? renderProviderExtra(PROVIDER_LIMIT_SPECS.kiro.extra, data)
-          : null}
         {id === "opencodeGo" ? <OpenCodeGoSetupHint /> : null}
         {id === "commandCode" ? <CommandCodeSetupHint /> : null}
         {id === "codingPlan" ? <ArkCodingPlanSetupHint /> : null}
@@ -1169,8 +1149,8 @@ function useWidestLabelWidth(containerRef) {
   return labelWidth;
 }
 
-export function UsageLimitsPanel({ claude, codex, cursor, gemini, kimi, kiro, grok, antigravity, copilot, zcode, opencodeGo, commandCode, qoder, qoderCn, codingPlan, agentPlan, devin, order, visibility, displayMode, subscriptions = [], showSubscriptions = true }) {
-  const dataById = { claude, codex, cursor, gemini, kimi, kiro, grok, antigravity, copilot, zcode, opencodeGo, commandCode, qoder, qoderCn, codingPlan, agentPlan, devin };
+export function UsageLimitsPanel({ claude, codex, cursor, gemini, kimi, grok, antigravity, copilot, zcode, opencodeGo, commandCode, qoder, qoderCn, codingPlan, agentPlan, devin, order, visibility, displayMode, subscriptions = [], showSubscriptions = true }) {
+  const dataById = { claude, codex, cursor, gemini, kimi, grok, antigravity, copilot, zcode, opencodeGo, commandCode, qoder, qoderCn, codingPlan, agentPlan, devin };
   const containerRef = useRef(null);
   const labelWidth = useWidestLabelWidth(containerRef);
   const [expandedId, setExpandedId] = useState(null);

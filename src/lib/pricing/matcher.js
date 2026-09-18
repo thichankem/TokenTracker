@@ -2,10 +2,10 @@
 //
 // Resolve order:
 //   0. CURATED source exact match (source-specific pricing)
-//   1. CURATED exact match (self-defined aliases like kiro-*, hy3-*)
+//   1. CURATED exact match (self-defined aliases like hy3-*)
 //   2. LiteLLM exact match (mainstream claude/gpt-5/gemini)
 //   3. CURATED alias (e.g. "auto" -> "composer-1")
-//   4. CURATED fuzzy substring (e.g. "kiro-future-xyz" matches via "kiro")
+//   4. CURATED fuzzy substring (e.g. "hy3-future-xyz" matches via "hy3")
 //   5. LiteLLM suffix-strip (gpt-5-codex-high-fast -> gpt-5-codex)
 //   5b. LiteLLM provider-prefix strip (mimo-v2.5-pro -> openrouter/xiaomi/mimo-v2.5-pro)
 //   6. LiteLLM reverse substring (longest-key first)
@@ -405,8 +405,35 @@ function buildLitellmPerMillionMap(rawData) {
   return out;
 }
 
+// Look up the RAW (un-normalized) model against an OpenRouter map whose keys are
+// provider-qualified (e.g. "google/gemini-3.8-flash"). This runs BEFORE source
+// normalizers collapse a model (e.g. antigravity `gemini-3.8-flash` ->
+// `gemini-2.5-flash`), so the model's own real price wins when OpenRouter lists
+// it. Exact match first, then any key whose path suffix equals the model
+// (lexicographically smallest for determinism, mirroring the LiteLLM
+// prefix-strip rule).
+function lookupOpenRouterPricing(model, openRouterMap) {
+  if (!model || typeof model !== "string" || !openRouterMap) {
+    return { hit: false, source: "miss", value: null };
+  }
+  if (openRouterMap[model]) {
+    return { hit: true, source: "openrouter:exact", value: openRouterMap[model] };
+  }
+  const lower = model.toLowerCase();
+  const suffix = "/" + lower;
+  let best = null;
+  for (const key of Object.keys(openRouterMap)) {
+    if (key.length > suffix.length && key.toLowerCase().endsWith(suffix)) {
+      if (best === null || key < best) best = key;
+    }
+  }
+  if (best) return { hit: true, source: "openrouter:prefix-strip", value: openRouterMap[best] };
+  return { hit: false, source: "miss", value: null };
+}
+
 module.exports = {
   lookupPricing,
+  lookupOpenRouterPricing,
   stripReasoningSuffix,
   normalizeAntigravityModel,
   normalizeIFlytekMaasModel,

@@ -57,11 +57,6 @@ describe("getUsageLimits single-flight", () => {
 
       assert.equal(r1, r2, "concurrent callers must resolve to the same result object");
       assert.equal(
-        commandCalls.filter((c) => c === "which kiro-cli").length,
-        1,
-        "Kiro probe must run once for two concurrent requests",
-      );
-      assert.equal(
         commandCalls.filter((c) => c.startsWith("/bin/ps")).length,
         1,
         "Antigravity ps probe must run once for two concurrent requests",
@@ -93,13 +88,13 @@ describe("getUsageLimits single-flight", () => {
       const [r1, r2] = await Promise.all([p1, p2]);
 
       assert.equal(r1, r2, "refresh arriving mid-flight reuses the in-flight fetch");
-      assert.equal(commandCalls.filter((c) => c === "which kiro-cli").length, 1);
+      assert.equal(commandCalls.filter((c) => c.startsWith("/bin/ps")).length, 1);
 
       // Once settled, the in-flight slot is released: a fresh refresh triggers a new round.
       resetUsageLimitsCache();
       await getUsageLimits(opts);
       assert.equal(
-        commandCalls.filter((c) => c === "which kiro-cli").length,
+        commandCalls.filter((c) => c.startsWith("/bin/ps")).length,
         2,
         "a refresh after settlement must trigger a new fetch round",
       );

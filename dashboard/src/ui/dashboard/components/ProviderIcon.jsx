@@ -72,14 +72,6 @@ function GrokIcon({ size = 16, className = "" }) {
   );
 }
 
-function KiroIcon({ size = 16, className = "" }) {
-  return (
-    <svg width={size} height={size} viewBox="0 -1 22 28" fill="currentColor" fillRule="evenodd" className={className}>
-      <path d="M4.125 20.149c-2.69 5.959 3.036 7.453 7.26 3.966 1.24 3.91 5.898.993 7.569-2.036 3.682-6.678 2.195-13.49 1.813-14.895-2.617-9.582-15.699-9.592-17.95.049-.526 1.687-.535 3.606-.833 5.598-.15 1.005-.256 1.646-.645 2.703-.223.607-.53 1.147-1.014 2.056-.75 1.412-.434 4.138 3.434 2.724v.001ZM11.895 11.332c-1.073 0-1.234-1.283-1.234-2.048 0-.69.124-1.239.358-1.586a1 1 0 0 1 .876-.462c.375 0 .697.158.924.47.259.354.395.9.395 1.578 0 1.283-.493 2.048-1.319 2.048Zm4.416 0c-1.073 0-1.234-1.283-1.234-2.048 0-.69.124-1.239.358-1.586a1 1 0 0 1 .876-.462c.375 0 .697.158.924.47.259.354.396.9.396 1.578 0 1.283-.494 2.048-1.32 2.048Z" />
-    </svg>
-  );
-}
-
 function OpenCodeIcon({ size = 16, className = "" }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" fillRule="evenodd" className={className}>
@@ -387,7 +379,6 @@ const PROVIDER_ICON_MAP = {
   GROK: GrokIcon,
   HERMES: HermesIcon,
   KIMI: KimiIcon,
-  KIRO: KiroIcon,
   KILOCODE: KilocodeIcon,
   MINIMAX: MinimaxIcon,
   OPENCODE: OpenCodeIcon,
@@ -402,7 +393,7 @@ const PROVIDER_ICON_MAP = {
 };
 
 // Multi-color brand SVG assets in /public/brand-logos/. Only logos that have
-// real brand colors live here — mono logos (cursor/kiro/copilot/kimi all use
+// real brand colors live here — mono logos (cursor/copilot/kimi all use
 // `fill="currentColor"`) must render through the inline component path so they
 // inherit the surrounding text color, since <img> doesn't resolve currentColor.
 const PROVIDER_LOGO_MAP = {

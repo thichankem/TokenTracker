@@ -86,15 +86,6 @@ export const PROVIDER_LIMIT_SPECS = {
       ];
     },
   },
-  kiro: {
-    extra: "kiro_credits",
-    windows(data) {
-      return [
-        { key: "month", labelKey: "limits.label.kiro_month", window: data.primary_window },
-        { key: "bonus", labelKey: "limits.label.kiro_bonus", window: data.secondary_window },
-      ];
-    },
-  },
   grok: {
     // Grok unified billing is weekly for SuperGrok / free-tier accounts and
     // monthly for legacy credit counters. period_type comes from the billing
@@ -266,8 +257,6 @@ export function usageLimitsLabelCopyAnchor() {
     copy("limits.label.kimi_weekly"),
     copy("limits.label.kimi_5h"),
     copy("limits.label.kimi_total"),
-    copy("limits.label.kiro_month"),
-    copy("limits.label.kiro_bonus"),
     copy("limits.label.grok_month"),
     copy("limits.label.grok_week"),
     copy("limits.label.grok_day"),

@@ -22,8 +22,6 @@ enum MenuBarDisplayMetric: String, CaseIterable {
     case kimiWeekly
     case kimi5h
     case kimiTotal
-    case kiroMonth
-    case kiroBonus
     case grokMonth
     case grokOndemand
     case copilotPremium
@@ -67,8 +65,6 @@ enum MenuBarDisplayMetric: String, CaseIterable {
         case .kimiWeekly: return "Km Wk"
         case .kimi5h: return "Km 5h"
         case .kimiTotal: return "Km Tot"
-        case .kiroMonth: return "Kr Mo"
-        case .kiroBonus: return "Kr Bn"
         // Preference id stays `grokMonth` for storage stability; label is period-agnostic
         // because SuperGrok accounts use a weekly pool while legacy is monthly.
         case .grokMonth: return "Gk"
@@ -116,8 +112,6 @@ enum MenuBarDisplayMetric: String, CaseIterable {
         case .kimiWeekly: return "Kimi Weekly Limit"
         case .kimi5h: return "Kimi 5h Limit"
         case .kimiTotal: return "Kimi Total Limit"
-        case .kiroMonth: return "Kiro Monthly Limit"
-        case .kiroBonus: return "Kiro Bonus Limit"
         case .grokMonth: return "Grok Build Limit"
         case .grokOndemand: return "Grok Build On-demand Limit"
         case .copilotPremium: return "Copilot Premium Limit"
@@ -150,7 +144,6 @@ enum MenuBarDisplayMetric: String, CaseIterable {
              .cursorPlan, .cursorAuto, .cursorAPI,
              .geminiPro, .geminiFlash, .geminiLite,
              .kimiWeekly, .kimi5h, .kimiTotal,
-             .kiroMonth, .kiroBonus,
              .grokMonth, .grokOndemand,
              .copilotPremium, .copilotChat,
              .antigravityClaudeWeekly, .antigravityClaude5h, .antigravityGeminiWeekly, .antigravityGemini5h,
@@ -175,7 +168,6 @@ enum MenuBarDisplayMetric: String, CaseIterable {
         case .cursorPlan, .cursorAuto, .cursorAPI: return "cursor"
         case .geminiPro, .geminiFlash, .geminiLite: return "gemini"
         case .kimiWeekly, .kimi5h, .kimiTotal: return "kimi"
-        case .kiroMonth, .kiroBonus: return "kiro"
         case .grokMonth, .grokOndemand: return "grok"
         case .copilotPremium, .copilotChat: return "copilot"
         case .antigravityClaudeWeekly, .antigravityClaude5h, .antigravityGeminiWeekly, .antigravityGemini5h: return "antigravity"
@@ -207,7 +199,6 @@ private extension UsageLimitsResponse {
         case "cursor": return cursor.configured && cursor.error == nil
         case "gemini": return gemini.configured && gemini.error == nil
         case "kimi": return (kimi?.configured == true) && (kimi?.error == nil)
-        case "kiro": return kiro.configured && kiro.error == nil
         case "grok": return (grok?.configured == true) && (grok?.error == nil)
         case "copilot": return (copilot?.configured == true) && (copilot?.error == nil)
         case "antigravity": return antigravity.configured && antigravity.error == nil
@@ -240,8 +231,6 @@ private extension UsageLimitsResponse {
         case .kimiWeekly: return kimi?.primaryWindow != nil
         case .kimi5h: return kimi?.secondaryWindow != nil
         case .kimiTotal: return kimi?.tertiaryWindow != nil
-        case .kiroMonth: return kiro.primaryWindow != nil
-        case .kiroBonus: return kiro.secondaryWindow != nil
         case .grokMonth: return grok?.primaryWindow != nil
         case .grokOndemand: return grok?.secondaryWindow != nil
         case .copilotPremium: return copilot?.primaryWindow != nil
@@ -362,7 +351,6 @@ enum MenuBarDisplayPreferences {
                  .cursorPlan, .cursorAuto, .cursorAPI,
                  .geminiPro, .geminiFlash, .geminiLite,
                  .kimiWeekly, .kimi5h, .kimiTotal,
-                 .kiroMonth, .kiroBonus,
                  .grokMonth, .grokOndemand,
                  .copilotPremium, .copilotChat,
                  .antigravityClaudeWeekly, .antigravityClaude5h,

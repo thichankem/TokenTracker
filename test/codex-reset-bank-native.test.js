@@ -97,7 +97,6 @@ func decodeResetCredits(_ resetCredits: Any?) throws -> CodexLimits.ResetCredits
         "codex": codex,
         "cursor": ["configured": false],
         "gemini": ["configured": false],
-        "kiro": ["configured": false],
         "antigravity": ["configured": false],
     ]
     let data = try JSONSerialization.data(withJSONObject: payload)

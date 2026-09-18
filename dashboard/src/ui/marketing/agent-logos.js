@@ -8,7 +8,6 @@ export const AGENT_LOGOS = [
   { id: 3, name: "Cursor", provider: "cursor" },
   { id: 4, name: "Gemini", provider: "gemini" },
   { id: 5, name: "Antigravity", provider: "antigravity" },
-  { id: 6, name: "Kiro", provider: "kiro" },
   { id: 7, name: "OpenCode", provider: "opencode" },
   { id: 8, name: "OpenClaw", provider: "openclaw" },
   { id: 9, name: "Every Code", provider: "every-code" },

@@ -73,7 +73,7 @@ final class WeeklyLimitResetDetectorTests: XCTestCase {
     }
 
     func testSlidingResetWithoutUsageDropDoesNotFire() {
-        // Kiro-style: reset_at slides forward every poll, but usage stayed high.
+        // Some providers slide reset_at forward every poll, but usage stayed high.
         // The minDrop guard prevents a false celebration.
         let (_, baseline) = detector.evaluate(readings: reading(80, resetAt: 5000), snapshot: .init(), now: 1000)
         let (events, _) = detector.evaluate(readings: reading(82, resetAt: 5300), snapshot: baseline, now: 1300)
@@ -113,7 +113,6 @@ final class WeeklyLimitResetDetectorTests: XCTestCase {
           "codex": { "configured": true, "error": null, "primary_window": { "used_percent": 80, "reset_at": 1000, "limit_window_seconds": 18000 } },
           "cursor": { "configured": false, "error": null },
           "gemini": { "configured": false, "error": null },
-          "kiro": { "configured": false, "error": null },
           "antigravity": { "configured": false, "error": null }
         }
         """
@@ -134,7 +133,6 @@ final class WeeklyLimitResetDetectorTests: XCTestCase {
           "codex": { "configured": false, "error": null },
           "cursor": { "configured": false, "error": null },
           "gemini": { "configured": false, "error": null },
-          "kiro": { "configured": false, "error": null },
           "antigravity": { "configured": false, "error": null },
           "zcode": {
             "configured": true,
@@ -182,7 +180,6 @@ final class WeeklyLimitResetDetectorTests: XCTestCase {
           "codex": { "configured": false },
           "cursor": { "configured": false },
           "gemini": { "configured": false },
-          "kiro": { "configured": false },
           "antigravity": { "configured": false },
           "codingPlan": {
             "configured": true, "plan_label": "Lite",
@@ -218,7 +215,6 @@ final class WeeklyLimitResetDetectorTests: XCTestCase {
           "codex": { "configured": false, "error": null },
           "cursor": { "configured": false, "error": null },
           "gemini": { "configured": false, "error": null },
-          "kiro": { "configured": false, "error": null },
           "antigravity": { "configured": false, "error": null },
           "qoder": {
             "configured": true,
@@ -257,7 +253,6 @@ final class WeeklyLimitResetDetectorTests: XCTestCase {
           "codex": { "configured": false },
           "cursor": { "configured": false },
           "gemini": { "configured": false },
-          "kiro": { "configured": false },
           "antigravity": { "configured": false },
           "devin": {
             "configured": true,
@@ -287,7 +282,6 @@ final class WeeklyLimitResetDetectorTests: XCTestCase {
           "codex": { "configured": false },
           "cursor": { "configured": false },
           "gemini": { "configured": false },
-          "kiro": { "configured": false },
           "antigravity": { "configured": false },
           "devin": {
             "configured": true,

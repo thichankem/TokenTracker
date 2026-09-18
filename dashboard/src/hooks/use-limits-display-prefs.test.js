@@ -129,7 +129,6 @@ describe("useLimitsDisplayPrefs", () => {
         "gemini",
         "grok",
         "kimi",
-        "kiro",
         "opencodeGo",
         "qoder",
         "qoderCn",

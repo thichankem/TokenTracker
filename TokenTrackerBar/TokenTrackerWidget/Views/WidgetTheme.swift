@@ -35,7 +35,6 @@ enum WidgetTheme {
         case "cursor":      return .yellow
         case "kimi":        return .purple
         case "everycode":   return .cyan
-        case "kiro":        return .mint
         case "grok":        return .primary
         case "antigravity": return .indigo
         case "copilot":     return .teal

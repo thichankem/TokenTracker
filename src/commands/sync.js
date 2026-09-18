@@ -38,9 +38,6 @@ const {
   resolveQoderCnProjectsDir,
   listQoderNewSessionFiles,
   parseQoderNewIncremental,
-  resolveKiroDbPath,
-  resolveKiroJsonlPath,
-  resolveKiroBasePath,
   resolveHermesPath,
   resolveCopilotOtelPaths,
   normalizeCopilotDbPath,
@@ -63,13 +60,10 @@ const {
   readClaudeScienceFrames,
   parseClaudeScienceIncremental,
   parseCursorApiIncremental,
-  parseKiroIncremental,
   parseHermesIncremental,
   gooseInstallOwnsCursor,
   zedInstallOwnsCursor,
   hermesInstallOwnsCursor,
-  kiroInstallOwnsCursor,
-  kiroCliInstallOwnsCursor,
   copilotOtelCursorHasLegacyCliUsage,
   pruneCopilotUsageClaims,
   parseCopilotIncremental,
@@ -104,9 +98,6 @@ const {
   parseCodebuddyIncremental,
   resolveWorkbuddyProjectFiles,
   parseWorkbuddyIncremental,
-  resolveKiroCliSessionFiles,
-  resolveKiroCliDbPath,
-  parseKiroCliIncremental,
   resolveKilocodeTaskFiles,
   parseKilocodeIncremental,
   resolveRoocodeTaskFiles,
@@ -131,6 +122,8 @@ const {
   parseDshIncremental,
   resolveFreebuffDbPaths,
   parseFreebuffIncremental,
+  resolveMinimaxSessionFiles,
+  parseMinimaxIncremental,
   resolveClineSessionFiles,
   parseClineIncremental,
   parseTraeCnApiIncremental,
@@ -312,9 +305,9 @@ const AUTO_SYNC_SOURCES = new Set([
   "hermes",
   "kilo-cli",
   "kilocode",
-  "kiro",
   "kimi",
   "kimi-code",
+  "minimax",
   "lmstudio",
   "mimo",
   "omo",
@@ -1664,6 +1657,29 @@ async function cmdSync(argv, context = {}) {
       }
     }
 
+    // ── MiniMax Code — passive JSONL reader ──
+    let minimaxResult = { recordsProcessed: 0, eventsAggregated: 0, bucketsQueued: 0 };
+    if (sourceAllowed("minimax")) {
+      const minimaxSessionFiles = resolveMinimaxSessionFiles(process.env);
+      if (minimaxSessionFiles.length > 0) {
+        if (progress?.enabled) {
+          progress.start(
+            `Parsing MiniMax ${renderBar(0)} 0/${formatNumber(minimaxSessionFiles.length)} sessions | buckets 0`,
+          );
+        }
+        try {
+          minimaxResult = await parseMinimaxIncremental({
+            sessionFiles: minimaxSessionFiles,
+            cursors,
+            queuePath,
+            onProgress: makeProviderProgress("MiniMax"),
+          });
+        } catch (err) {
+          warnProviderParseFailure("MiniMax", err, opts);
+        }
+      }
+    }
+
     // ── Cline (cline-app desktop + VSCode extension) — passive JSON reader ──
     const clineSessionFiles = sourceAllowed("cline")
       ? resolveClineSessionFiles(process.env)
@@ -2077,47 +2093,6 @@ async function cmdSync(argv, context = {}) {
       }
     }
 
-    // ── Kiro (SQLite-based, with JSONL fallback; dual-install aware) ──
-    let kiroResult = { recordsProcessed: 0, eventsAggregated: 0, bucketsQueued: 0 };
-    if (sourceAllowed("kiro")) {
-      const kiroNativeBase = resolveKiroBasePath(process.env);
-      const wslKiroBase = process.platform === "win32" && wsl.shouldProbeWsl(process.env)
-        ? wsl.discoverWslHome(".config/Kiro/User/globalStorage/kiro.kiroagent")
-        : null;
-      const kiroPaths = resolveInstallPaths({ nativeValue: kiroNativeBase, wslValue: wslKiroBase });
-      // resolveInstallPaths only checks the base dir (and skips the check off
-      // win32); keep the original per-install db/jsonl presence gate so empty
-      // installs never spin up a parse or seed a cursor namespace.
-      const kiroHasData = (base) => Boolean(base)
-        && (fssync.existsSync(resolveKiroDbPath(base)) || fssync.existsSync(resolveKiroJsonlPath(base)));
-      if (!kiroHasData(kiroPaths.native)) kiroPaths.native = null;
-      if (!kiroHasData(kiroPaths.wsl)) kiroPaths.wsl = null;
-      if (kiroPaths.native || kiroPaths.wsl) {
-        if (progress?.enabled) {
-          progress.start(`Parsing Kiro ${renderBar(0)} | buckets 0`);
-        }
-        try {
-          kiroResult = await multiInstallParse({
-            paths: kiroPaths,
-            parserFn: parseKiroIncremental,
-            providerName: "kiro",
-            cursors,
-            getParams: (base) => ({
-              basePath: base,
-              dbPath: resolveKiroDbPath(base),
-              jsonlPath: resolveKiroJsonlPath(base),
-            }),
-            queuePath,
-            onProgress: makeProviderProgress("Kiro"),
-            detectInstall: (base, flatState) =>
-              kiroInstallOwnsCursor(resolveKiroDbPath(base), flatState),
-          });
-        } catch (err) {
-          warnProviderParseFailure("Kiro", err, opts);
-        }
-      }
-    }
-
     // ── Hermes Agent (SQLite-based) ──
     let hermesResult = { recordsProcessed: 0, eventsAggregated: 0, bucketsQueued: 0 };
     if (sourceAllowed("hermes")) {
@@ -2190,92 +2165,6 @@ async function cmdSync(argv, context = {}) {
       progress.update(
         `Parsing Zed Agent ${renderBar(pct)} ${formatNumber(p.index)}/${formatNumber(p.total)} threads | buckets ${formatNumber(p.bucketsQueued)}`,
       );
-    }
-
-    // ── Kiro CLI (reads ~/Library/Application Support/kiro-cli/data.sqlite3,
-    //    legacy ~/.kiro/sessions/cli/{uuid}.json, and Kiro CLI 2.13+
-    //    ~/.kiro/sessions/{workspace}/sess_{uuid}/messages.jsonl) ──
-    // Runs IN PARALLEL with the Kiro IDE branch above — NOT instead of it.
-    // Both emit source='kiro' so totals merge transparently; cursor state
-    // is isolated in cursors.kiroCli. Kiro CLI does not persist explicit
-    // token counts (billing is credit-based on Bedrock); we approximate at
-    // 4 chars/token from user prompt chars and assistant response chars.
-    let kiroCliResult = { recordsProcessed: 0, eventsAggregated: 0, bucketsQueued: 0 };
-    if (sourceAllowed("kiro")) {
-      const kiroCliDb = resolveKiroCliDbPath(process.env);
-      const kiroCliSessionFiles = resolveKiroCliSessionFiles(process.env);
-      const nativeCliPresent = fssync.existsSync(kiroCliDb) || kiroCliSessionFiles.length > 0;
-
-      // Explicit overrides pin a single install — never mix them with WSL
-      // auto-discovery (mirrors the Hermes TOKENTRACKER_HERMES_HOME branch).
-      const kiroCliOverride = Boolean(process.env.KIRO_CLI_DB_PATH || process.env.KIRO_HOME);
-      let wslKiroCliEnv = null;
-      let wslKiroCliMarker = null;
-      if (!kiroCliOverride && process.platform === "win32" && wsl.shouldProbeWsl(process.env)) {
-        // A WSL install owns BOTH a data dir (~/.local/share/kiro-cli) and a
-        // sessions home (~/.kiro). Derive both from whichever probe hits so
-        // the per-install env never falls back to native paths.
-        const wslKiroHomeDir = wsl.discoverWslHome(".kiro");
-        const wslCliDataDir = wsl.discoverWslHome(".local/share/kiro-cli");
-        const wslHomeRoot = wslKiroHomeDir
-          ? path.dirname(wslKiroHomeDir)
-          : (wslCliDataDir ? path.dirname(path.dirname(path.dirname(wslCliDataDir))) : null);
-        if (wslHomeRoot) {
-          const wslCliDb = path.join(wslHomeRoot, ".local", "share", "kiro-cli", "data.sqlite3");
-          wslKiroCliEnv = {
-            ...process.env,
-            KIRO_CLI_DB_PATH: wslCliDb,
-            KIRO_HOME: path.join(wslHomeRoot, ".kiro"),
-          };
-          const wslCliPresent = fssync.existsSync(wslCliDb)
-            || resolveKiroCliSessionFiles(wslKiroCliEnv).length > 0;
-          if (wslCliPresent) wslKiroCliMarker = wslCliDb;
-        }
-      }
-
-      // Paths here are install markers only — the parser resolves its DB and
-      // session files from the per-install env (KIRO_CLI_DB_PATH/KIRO_HOME).
-      const kiroCliPaths = process.platform === "win32"
-        ? wsl.resolveAllWin32Paths({
-          nativeValue: nativeCliPresent ? kiroCliDb : null,
-          wslValue: wslKiroCliMarker,
-          env: process.env,
-          platform: "win32",
-        })
-        : { native: nativeCliPresent ? kiroCliDb : null, wsl: null };
-      const kiroCliEnvFor = (p) =>
-        wslKiroCliEnv && p === wslKiroCliMarker ? wslKiroCliEnv : process.env;
-      if (kiroCliPaths.native || kiroCliPaths.wsl) {
-        if (progress?.enabled) {
-          progress.start(`Parsing Kiro CLI ${renderBar(0)} | buckets 0`);
-        }
-        try {
-          kiroCliResult = await multiInstallParse({
-            paths: kiroCliPaths,
-            parserFn: parseKiroCliIncremental,
-            providerName: "kiroCli",
-            cursors,
-            // Per-install env MUST come from getParams: multiInstallParse
-            // spreads shared params over it, so a top-level env would clobber
-            // the per-install one.
-            getParams: (p) => ({ env: kiroCliEnvFor(p) }),
-            queuePath,
-            onProgress: (p) => {
-              if (!progress?.enabled) return;
-              const pct = p.total > 0 ? p.index / p.total : 1;
-              progress.update(
-                `Parsing Kiro CLI ${renderBar(pct)} ${formatNumber(p.index)}/${formatNumber(p.total)} sessions | buckets ${formatNumber(p.bucketsQueued)}`,
-              );
-            },
-            detectInstall: (p, flatState) =>
-              kiroCliInstallOwnsCursor(kiroCliEnvFor(p).KIRO_CLI_DB_PATH || kiroCliDb, flatState),
-          });
-        } catch (err) {
-          if (!opts.auto) {
-            process.stderr.write(`Kiro CLI sync: ${err.message}\n`);
-          }
-        }
-      }
     }
 
     // ── Kimi (passive wire.jsonl reader) ──
@@ -3052,8 +2941,6 @@ async function cmdSync(argv, context = {}) {
       claudeScienceResult.recordsProcessed +
       cursorResult.recordsProcessed +
       traeCnResult.recordsProcessed +
-      kiroResult.recordsProcessed +
-      kiroCliResult.recordsProcessed +
       hermesResult.recordsProcessed +
       kimiResult.recordsProcessed +
       kimiCodeResult.recordsProcessed +
@@ -3080,6 +2967,7 @@ async function cmdSync(argv, context = {}) {
       gooseResult.recordsProcessed +
       dshResult.recordsProcessed +
       freebuffResult.recordsProcessed +
+      minimaxResult.recordsProcessed +
       clineResult.recordsProcessed +
       droidResult.recordsProcessed;
     const totalBuckets =
@@ -3094,8 +2982,6 @@ async function cmdSync(argv, context = {}) {
       claudeScienceResult.bucketsQueued +
       cursorResult.bucketsQueued +
       traeCnResult.bucketsQueued +
-      kiroResult.bucketsQueued +
-      kiroCliResult.bucketsQueued +
       hermesResult.bucketsQueued +
       kimiResult.bucketsQueued +
       kimiCodeResult.bucketsQueued +
@@ -3122,6 +3008,7 @@ async function cmdSync(argv, context = {}) {
       gooseResult.bucketsQueued +
       dshResult.bucketsQueued +
       freebuffResult.bucketsQueued +
+      minimaxResult.bucketsQueued +
       clineResult.bucketsQueued +
       droidResult.bucketsQueued;
     const skipNoOpCursorCommit =

@@ -383,15 +383,6 @@ enum WidgetSnapshotWriter {
             }
         }
 
-        // Kiro
-        if limits.kiro.configured {
-            if let w = limits.kiro.primaryWindow {
-                out.append(LimitProvider(source: "kiro", label: "Kiro",
-                                         fraction: w.usedPercent / 100.0,
-                                         resetsAt: parseISO(w.resetAt)))
-            }
-        }
-
         // Grok Build
         if let grok = limits.grok, grok.configured {
             if let w = grok.primaryWindow {

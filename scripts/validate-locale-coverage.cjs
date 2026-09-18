@@ -36,6 +36,7 @@ const SOURCE_IDENTICAL_KEY_ALLOWLIST = [
   /^limits[.]label[.](?:cursor_api|zcode_glm52|zcode_glm5t|claude_opus|codex_spark_[57][hd]|gemini_(?:pro|flash|lite)|antigravity_)/,
   /^skills[.]mode[.]skillssh$/,
   /^skills[.]repo[.]placeholder$/,
+  /^settings[.]remote[.]domainPlaceholder$/,
   /^ipcheck[.]props[.]asn$/,
   /^ipcheck[.]security[.](?:vpn|tor)$/,
   /^shared[.]app_name$/,

@@ -320,7 +320,6 @@ leaderboard.column.cursor,dashboard,LeaderboardPage,LeaderboardPage,column_curso
 leaderboard.column.opencode,dashboard,LeaderboardPage,LeaderboardPage,column_opencode,"OpenCode",,active
 leaderboard.column.openclaw,dashboard,LeaderboardPage,LeaderboardPage,column_openclaw,"OpenClaw",,active
 leaderboard.column.hermes,dashboard,LeaderboardPage,LeaderboardPage,column_hermes,"Hermes",,active
-leaderboard.column.kiro,dashboard,LeaderboardPage,LeaderboardPage,column_kiro,"Kiro",,active
 leaderboard.column.copilot,dashboard,LeaderboardPage,LeaderboardPage,column_copilot,"GitHub Copilot",,active
 leaderboard.column.kimi,dashboard,LeaderboardPage,LeaderboardPage,column_kimi,"Kimi Code",,active
 leaderboard.column.kilo-cli,dashboard,LeaderboardPage,LeaderboardPage,column_kilo_cli,"Kilo CLI",,active
@@ -465,6 +464,8 @@ settings.section.appearance,ui,SettingsPage,SettingsPage,sec_appearance,"Appeara
 settings.section.appearance.description,ui,SettingsPage,SettingsPage,sec_appearance_description,"Theme, language, currency, and number formatting.",,active
 settings.section.account,ui,SettingsPage,SettingsPage,sec_account,"Account",,active
 settings.section.account.description,ui,SettingsPage,SettingsPage,sec_account_description,"Cloud sync, public profile, and account details.",,active
+settings.section.remote,ui,SettingsPage,SettingsPage,sec_remote,"Remote Connection",,active
+settings.section.remote.description,ui,SettingsPage,SettingsPage,sec_remote_description,"Open the dashboard on your phone by scanning a QR code.",,active
 settings.section.limits,ui,SettingsPage,SettingsPage,sec_limits,"Usage & Limits",,active
 settings.section.limits.description,ui,SettingsPage,SettingsPage,sec_limits_description,"Choose how usage is shown and configure limit providers.",,active
 settings.section.network,ui,SettingsPage,NetworkSection,sec_network,"Network",,active
@@ -573,6 +574,17 @@ settings.account.copy,ui,SettingsPage,SettingsPage,copy,"Copy",,active
 settings.account.copied,ui,SettingsPage,SettingsPage,copied,"Copied",,active
 settings.account.cloudSync,ui,SettingsPage,SettingsPage,cloud_sync,"Cloud sync",,active
 settings.account.cloudSyncHint,ui,SettingsPage,SettingsPage,cloud_sync_hint,"Upload local usage to your Token Tracker cloud account.",,active
+settings.remote.qrLabel,ui,SettingsPage,SettingsPage,remote_qr_label,"QR code to open the dashboard on your phone",,active
+settings.remote.domainLabel,ui,SettingsPage,SettingsPage,remote_domain_label,"Your domain (optional)",,active
+settings.remote.domainHint,ui,SettingsPage,SettingsPage,remote_domain_hint,"Use your own domain instead: type it here (e.g. token.example.com) and the QR will open your domain. Leave blank to use tokentracker.cc.",,active
+settings.remote.domainPlaceholder,ui,SettingsPage,SettingsPage,remote_domain_placeholder,"token.example.com",,active
+settings.remote.domainNote,ui,SettingsPage,SettingsPage,remote_domain_note,"Using your own domain — make sure it points to the dashboard (DNS CNAME to Vercel) before scanning.",,active
+settings.remote.copyUrl,ui,SettingsPage,SettingsPage,remote_copy_url,"Copy URL",,active
+settings.remote.copied,ui,SettingsPage,SettingsPage,remote_copied,"Copied",,active
+settings.remote.step1,ui,SettingsPage,SettingsPage,remote_step1,"Open the camera app on your phone and point it at the QR code.",,active
+settings.remote.step2,ui,SettingsPage,SettingsPage,remote_step2,"Tap the banner to open Token Tracker, then sign in with your account.",,active
+settings.remote.step3,ui,SettingsPage,SettingsPage,remote_step3,"To install it like an app, use “Add to Home Screen” (iPhone) or “Add to Home screen” (Android).",,active
+settings.remote.cloudSyncHint,ui,SettingsPage,SettingsPage,remote_cloud_sync_hint,"Make sure Cloud sync is on (Settings → Account) so your phone sees the latest usage.",,active
 settings.account.publicProfile,ui,SettingsPage,SettingsPage,public_profile,"Public profile",,active
 settings.account.publicProfileHint,ui,SettingsPage,SettingsPage,public_profile_hint,"Show your usage on the public leaderboard.",,active
 settings.account.displayNameAnonymousHint,ui,SettingsPage,SettingsPage,display_name_anon_hint,"Anonymous — your name and avatar are hidden on the leaderboard",,active
@@ -750,9 +762,6 @@ limits.label.cursor_plan,ui,LimitsPage,UsageLimitsPanel,cursor_plan,"Plan",,acti
 limits.label.cursor_auto,ui,LimitsPage,UsageLimitsPanel,cursor_auto,"Auto",,active
 limits.label.cursor_api,ui,LimitsPage,UsageLimitsPanel,cursor_api,"API",,active
 limits.label.cursor_grok_bot,ui,LimitsPage,UsageLimitsPanel,cursor_grok_bot,"Grok Bot",,active
-limits.label.kiro_month,ui,LimitsPage,UsageLimitsPanel,kiro_month,"Month",,active
-limits.label.kiro_bonus,ui,LimitsPage,UsageLimitsPanel,kiro_bonus,"Bonus",,active
-limits.label.kiro_tracked_credits,ui,LimitsPage,UsageLimitsPanel,kiro_tracked_credits,"Local usage: {{credits}} credits · {{count}} turns",,active
 limits.label.kimi_weekly,ui,LimitsPage,UsageLimitsPanel,kimi_weekly,"Weekly",,active
 limits.label.kimi_5h,ui,LimitsPage,UsageLimitsPanel,kimi_5h,"5h",,active
 limits.label.kimi_total,ui,LimitsPage,UsageLimitsPanel,kimi_total,"Total",,active
@@ -780,7 +789,6 @@ limits.provider.codex,ui,LimitsPage,UsageLimitsPanel,provider_codex,"Codex",,act
 limits.provider.cursor,ui,LimitsPage,UsageLimitsPanel,provider_cursor,"Cursor",,active
 limits.provider.gemini,ui,LimitsPage,UsageLimitsPanel,provider_gemini,"Gemini",,active
 limits.provider.kimi,ui,LimitsPage,UsageLimitsPanel,provider_kimi,"Kimi",,active
-limits.provider.kiro,ui,LimitsPage,UsageLimitsPanel,provider_kiro,"Kiro",,active
 limits.provider.grok,ui,LimitsPage,UsageLimitsPanel,provider_grok,"Grok Build",,active
 limits.provider.copilot,ui,LimitsPage,UsageLimitsPanel,provider_copilot,"GitHub Copilot",,active
 limits.provider.antigravity,ui,LimitsPage,UsageLimitsPanel,provider_antigravity,"Antigravity",,active

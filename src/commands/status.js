@@ -48,11 +48,6 @@ const { resolveTrackerPaths } = require("../lib/tracker-paths");
 const {
   resolveKimiWireFiles,
   resolveKimiCodeWireFiles,
-  resolveKiroCliDbPath,
-  resolveKiroCliSessionFiles,
-  resolveKiroBasePath,
-  resolveKiroDbPath,
-  resolveKiroJsonlPath,
   resolveCodebuddyHome,
   resolveCodebuddyProjectFiles,
   resolveWorkbuddyHome,
@@ -85,6 +80,7 @@ const {
   resolveAnythingllmDbPath,
   resolveDevinDbPath,
   resolveFreebuffDbPaths,
+  resolveMinimaxSessionFiles,
   resolveClineSessionFiles,
   resolveGooseDbPath,
   listDroidSettingsFiles,
@@ -323,82 +319,6 @@ async function cmdStatus(argv = []) {
   const kimiCodeWireFiles = resolveKimiCodeWireFiles(process.env);
   const kimiCodeHome = process.env.KIMI_CODE_HOME || path.join(home, ".kimi-code");
   const kimiCodeInstalled = fssync.existsSync(path.join(kimiCodeHome, "sessions"));
-
-  // Kiro CLI — reads the legacy SQLite/session files and Kiro CLI 2.13+
-  // event sessions. End-user dashboards show them merged under "Kiro"; this
-  // status line surfaces which passive sources are actually present.
-  const kiroCliDbPath = resolveKiroCliDbPath(process.env);
-  const kiroCliSessionFiles = resolveKiroCliSessionFiles(process.env);
-  const kiroCliNativePresent =
-    fssync.existsSync(kiroCliDbPath) || kiroCliSessionFiles.length > 0;
-  // WSL install discovery mirrors sync: overrides pin a single install.
-  let kiroCliWsl = null; // { db, sessionFiles }
-  if (
-    process.platform === "win32" &&
-    !process.env.KIRO_CLI_DB_PATH && !process.env.KIRO_HOME &&
-    wsl.shouldProbeWsl(process.env)
-  ) {
-    const wslKiroHomeDir = wsl.discoverWslHome(".kiro");
-    const wslCliDataDir = wsl.discoverWslHome(".local/share/kiro-cli");
-    const wslHomeRoot = wslKiroHomeDir
-      ? path.dirname(wslKiroHomeDir)
-      : (wslCliDataDir ? path.dirname(path.dirname(path.dirname(wslCliDataDir))) : null);
-    if (wslHomeRoot) {
-      const wslDb = path.join(wslHomeRoot, ".local", "share", "kiro-cli", "data.sqlite3");
-      const wslFiles = resolveKiroCliSessionFiles({
-        ...process.env,
-        KIRO_CLI_DB_PATH: wslDb,
-        KIRO_HOME: path.join(wslHomeRoot, ".kiro"),
-      });
-      if (fssync.existsSync(wslDb) || wslFiles.length > 0) {
-        kiroCliWsl = { db: wslDb, sessionFiles: wslFiles };
-      }
-    }
-  }
-  const kiroCliPaths = process.platform === "win32"
-    ? wsl.resolveAllWin32Paths({
-      nativeValue: kiroCliNativePresent ? kiroCliDbPath : null,
-      wslValue: kiroCliWsl ? kiroCliWsl.db : null,
-      env: process.env,
-      platform: "win32",
-    })
-    : { native: kiroCliNativePresent ? kiroCliDbPath : null, wsl: null };
-  // Non-both modes park the picked value in the native slot — label by
-  // marker identity, not slot name. A session-files-only install has no DB
-  // on disk; show the sessions dir instead of a nonexistent DB path.
-  const kiroCliMarkers = [kiroCliPaths.native, kiroCliPaths.wsl].filter(Boolean);
-  const kiroCliActive = kiroCliMarkers.map((m) => {
-    if (kiroCliWsl && m === kiroCliWsl.db) {
-      const shown = fssync.existsSync(m) || kiroCliWsl.sessionFiles.length === 0
-        ? m
-        : path.dirname(kiroCliWsl.sessionFiles[0]);
-      return `WSL: ${shown}`;
-    }
-    const shown = fssync.existsSync(m) || kiroCliSessionFiles.length === 0
-      ? m
-      : path.dirname(kiroCliSessionFiles[0]);
-    return `native: ${shown}`;
-  });
-  const kiroCliFileCount =
-    (kiroCliMarkers.includes(kiroCliDbPath) ? kiroCliSessionFiles.length : 0) +
-    (kiroCliWsl && kiroCliMarkers.includes(kiroCliWsl.db) ? kiroCliWsl.sessionFiles.length : 0);
-  const kiroCliDbFound = kiroCliMarkers.some((m) => {
-    try { return fssync.existsSync(m); } catch (_e) { return false; }
-  });
-  const kiroCliInstalled = kiroCliMarkers.length > 0;
-
-  // Kiro IDE — passive scan of globalStorage dev_data (SQLite or JSONL).
-  const kiroIdeNativeBase = resolveKiroBasePath(process.env);
-  const wslKiroIdeBase = process.platform === "win32" && wsl.shouldProbeWsl(process.env)
-    ? wsl.discoverWslHome(".config/Kiro/User/globalStorage/kiro.kiroagent")
-    : null;
-  const kiroIdePaths = resolveInstallPaths({ nativeValue: kiroIdeNativeBase, wslValue: wslKiroIdeBase });
-  const kiroIdeHasData = (base) => Boolean(base)
-    && (fssync.existsSync(resolveKiroDbPath(base)) || fssync.existsSync(resolveKiroJsonlPath(base)));
-  const kiroIdeActive = [kiroIdePaths.native, kiroIdePaths.wsl]
-    .filter((base) => kiroIdeHasData(base))
-    .map((base) => (wslKiroIdeBase && base === wslKiroIdeBase ? `WSL: ${base}` : `native: ${base}`));
-  const kiroIdeInstalled = kiroIdeActive.length > 0;
 
   // Claude Code — dual-install aware projects scan (#307). Mirrors sync:
   // installs are UNIONED (not single-picked by mode) so a WSL ~/.claude
@@ -723,6 +643,10 @@ async function cmdStatus(argv = []) {
   const freebuffDbPaths = resolveFreebuffDbPaths(process.env);
   const freebuffInstalled = freebuffDbPaths.length > 0;
 
+  // MiniMax Code — passive JSONL reader for ~/.minimax/v2/sessions/**/messages.jsonl
+  const minimaxSessionFiles = resolveMinimaxSessionFiles(process.env);
+  const minimaxInstalled = minimaxSessionFiles.length > 0;
+
   // Cline (cline-app desktop + VSCode extension) — passive JSON reader.
   const clineSessionFiles = resolveClineSessionFiles(process.env);
   const clineInstalled = clineSessionFiles.length > 0;
@@ -977,19 +901,6 @@ async function cmdStatus(argv = []) {
         kimi_code: kimiInstalled || kimiCodeInstalled
           ? { installed: true, files: kimiWireFiles.length + kimiCodeWireFiles.length }
           : { installed: false },
-        kiro_cli: kiroCliInstalled
-          ? {
-              installed: true,
-              detail: kiroCliActive.join(" | "),
-              database: kiroCliMarkers.find((m) => {
-                try { return fssync.existsSync(m); } catch (_e) { return false; }
-              }) || null,
-              files: kiroCliFileCount,
-            }
-          : { installed: false },
-        kiro_ide: kiroIdeInstalled
-          ? { installed: true, detail: kiroIdeActive.join(" | ") }
-          : { installed: false },
         claude_code: claudeCodeInstalled
           ? { installed: true, detail: claudeCodeActive.join(" | ") }
           : { installed: false },
@@ -1074,6 +985,9 @@ async function cmdStatus(argv = []) {
           : { installed: false },
         freebuff: freebuffInstalled
           ? { installed: true, files: freebuffDbPaths.length, detail: "projects" }
+          : { installed: false },
+        minimax: minimaxInstalled
+          ? { installed: true, files: minimaxSessionFiles.length, detail: "sessions" }
           : { installed: false },
         cline: clineInstalled
           ? { installed: true, files: clineSessionFiles.length, detail: "sessions" }
@@ -1166,12 +1080,6 @@ async function cmdStatus(argv = []) {
       `- OpenClaw hook (legacy): ${openclawHookState?.configured ? "set" : "unset"}`,
       kimiInstalled || kimiCodeInstalled
         ? `- Kimi Code: passive reader (${kimiWireFiles.length + kimiCodeWireFiles.length} wire.jsonl file${(kimiWireFiles.length + kimiCodeWireFiles.length) !== 1 ? "s" : ""} found, directories: ${kimiActive.join(" | ") || "none"})`
-        : null,
-      kiroCliInstalled
-        ? `- Kiro CLI: passive reader (${kiroCliFileCount} session file${kiroCliFileCount !== 1 ? "s" : ""} found, SQLite ${kiroCliDbFound ? "found" : "not found"}, installs: ${kiroCliActive.join(" | ")}; tokens approximated from char lengths and merged under 'kiro')`
-        : null,
-      kiroIdeInstalled
-        ? `- Kiro IDE: passive reader (${kiroIdeActive.join(" | ")})`
         : null,
       codebuddyInstalled
         ? `- CodeBuddy hooks: ${codebuddyHookConfigured ? "set" : "unset"} (${codebuddyFiles.length} usage file${codebuddyFiles.length !== 1 ? "s" : ""} found)`
@@ -1272,6 +1180,9 @@ async function cmdStatus(argv = []) {
         : null,
       freebuffInstalled
         ? `- FreeBuff Desktop: passive reader (${freebuffDbPaths.length} project${freebuffDbPaths.length !== 1 ? "s" : ""})`
+        : null,
+      minimaxInstalled
+        ? `- MiniMax Code: passive reader (${minimaxSessionFiles.length} session${minimaxSessionFiles.length !== 1 ? "s" : ""})`
         : null,
       clineInstalled
         ? `- Cline: passive reader (${clineSessionFiles.length} session${clineSessionFiles.length !== 1 ? "s" : ""})`

@@ -43,7 +43,7 @@ const avatarProxyCache = new Map();
 
 // ---------------------------------------------------------------------------
 // Per-model pricing — delegated to src/lib/pricing/
-//   - CURATED overrides (kiro-*, hy3-*, composer-*, kimi-for-coding, etc.)
+//   - CURATED overrides (hy3-*, composer-*, kimi-for-coding, etc.)
 //   - LiteLLM live data (mainstream claude / gpt-5 / gemini), 24h disk-cached
 //   - Bundled seed snapshot for first-install / offline fallback
 // ---------------------------------------------------------------------------

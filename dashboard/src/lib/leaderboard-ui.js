@@ -76,7 +76,6 @@ export function prependMeRowToPage({ entries, me, meLabel }) {
     opencode_tokens: me?.opencode_tokens ?? "0",
     openclaw_tokens: me?.openclaw_tokens ?? "0",
     hermes_tokens: me?.hermes_tokens ?? "0",
-    kiro_tokens: me?.kiro_tokens ?? "0",
     copilot_tokens: me?.copilot_tokens ?? "0",
     kimi_tokens: me?.kimi_tokens ?? "0",
     other_tokens: me?.other_tokens ?? "0",

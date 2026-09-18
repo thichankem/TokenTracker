@@ -201,7 +201,6 @@ export function LimitsPage() {
                 cursor={usageLimits?.cursor}
                 gemini={usageLimits?.gemini}
                 kimi={usageLimits?.kimi}
-                kiro={usageLimits?.kiro}
                 grok={usageLimits?.grok}
                 antigravity={usageLimits?.antigravity}
                 copilot={usageLimits?.copilot}

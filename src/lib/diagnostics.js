@@ -19,50 +19,6 @@ const { probeOpenclawSessionPluginState } = require("./openclaw-session-plugin")
 const { probeGrokHookState } = require("./grok-hook");
 const { resolveTrackerPaths } = require("./tracker-paths");
 const wsl = require("./wsl-probe");
-// TASK-011: Kiro paths inlined here to avoid pulling the ~4000-line
-// rollout module on every `tokentracker status` / `diagnostics` call.
-// rollout.js still exports resolveKiroCliDbPath / resolveKiroBasePath for
-// external callers; keep the platform branches in lockstep.
-function resolveKiroIdeBaseInline(env, home) {
-  const suffix = ["Kiro", "User", "globalStorage", "kiro.kiroagent"];
-  if (process.platform === "win32") {
-    const appData = typeof env.APPDATA === "string" && env.APPDATA.trim().length > 0
-      ? env.APPDATA.trim()
-      : path.join(home, "AppData", "Roaming");
-    return path.join(appData, ...suffix);
-  }
-  if (process.platform === "linux") {
-    const configHome = typeof env.XDG_CONFIG_HOME === "string" && env.XDG_CONFIG_HOME.trim().length > 0
-      ? env.XDG_CONFIG_HOME.trim()
-      : path.join(home, ".config");
-    return path.join(configHome, ...suffix);
-  }
-  return path.join(home, "Library", "Application Support", ...suffix);
-}
-
-function resolveKiroCliDbPathInline(env, home) {
-  if (env.KIRO_CLI_DB_PATH) return env.KIRO_CLI_DB_PATH;
-  const effectiveHome = env.HOME || home;
-  if (process.platform === "win32") {
-    const localAppData = typeof env.LOCALAPPDATA === "string" && env.LOCALAPPDATA.trim().length > 0
-      ? env.LOCALAPPDATA.trim()
-      : path.join(effectiveHome, "AppData", "Local");
-    return path.join(localAppData, "kiro-cli", "data.sqlite3");
-  }
-  if (process.platform === "linux") {
-    const dataHome = typeof env.XDG_DATA_HOME === "string" && env.XDG_DATA_HOME.trim().length > 0
-      ? env.XDG_DATA_HOME.trim()
-      : path.join(effectiveHome, ".local", "share");
-    return path.join(dataHome, "kiro-cli", "data.sqlite3");
-  }
-  return path.join(
-    effectiveHome,
-    "Library",
-    "Application Support",
-    "kiro-cli",
-    "data.sqlite3",
-  );
-}
 
 async function collectTrackerDiagnostics({
   home = os.homedir(),
@@ -136,43 +92,12 @@ async function collectTrackerDiagnostics({
   const openclawHookState = await probeOpenclawHookState({ home, trackerDir, env: process.env });
   const grokHookState = await probeGrokHookState({ home, trackerDir, env: process.env });
 
-  // Kiro IDE and Kiro CLI sub-path presence — merged under one "kiro" source
-  // at token/cost aggregation level; operators need visibility of both
-  // sub-paths here for debugging.
-  const kiroIdeDevDataDir = path.join(resolveKiroIdeBaseInline(process.env, home), "dev_data");
-  const kiroIdePresent =
-    (await safeStatSize(path.join(kiroIdeDevDataDir, "devdata.sqlite"))) > 0 ||
-    (await safeStatSize(path.join(kiroIdeDevDataDir, "tokens_generated.jsonl"))) > 0;
-  const kiroCliDbPath = resolveKiroCliDbPathInline(process.env, home);
-  const kiroCliPresent = require("node:fs").existsSync(kiroCliDbPath);
-
   // WSL installs (win32 only) — surfaced so `tracker doctor --json` can
   // confirm dual-install discovery without running a sync.
-  let kiroWslInstalls = null;
   let claudeWslProjects = null;
   if (process.platform === "win32" && wsl.shouldProbeWsl(process.env)) {
     const wslClaudeHome = wsl.discoverWslHome(".claude");
     if (wslClaudeHome) claudeWslProjects = redactWslUser(path.join(wslClaudeHome, "projects"));
-    const wslIdeBase = wsl.discoverWslHome(".config/Kiro/User/globalStorage/kiro.kiroagent");
-    const wslKiroHomeDir = wsl.discoverWslHome(".kiro");
-    const wslCliDataDir = wsl.discoverWslHome(".local/share/kiro-cli");
-    const wslHomeRoot = wslKiroHomeDir
-      ? path.dirname(wslKiroHomeDir)
-      : (wslCliDataDir ? path.dirname(path.dirname(path.dirname(wslCliDataDir))) : null);
-    const wslCliDb = wslHomeRoot
-      ? path.join(wslHomeRoot, ".local", "share", "kiro-cli", "data.sqlite3")
-      : null;
-    if (wslIdeBase || wslHomeRoot) {
-      kiroWslInstalls = {
-        ide_dev_data: wslIdeBase ? redactWslUser(path.join(wslIdeBase, "dev_data")) : null,
-        ide_present: Boolean(wslIdeBase) && (
-          (await safeStatSize(path.join(wslIdeBase, "dev_data", "devdata.sqlite"))) > 0 ||
-          (await safeStatSize(path.join(wslIdeBase, "dev_data", "tokens_generated.jsonl"))) > 0
-        ),
-        cli_db: wslCliDb ? redactWslUser(wslCliDb) : null,
-        cli_present: Boolean(wslCliDb) && require("node:fs").existsSync(wslCliDb),
-      };
-    }
   }
 
   const lastSuccessAt = uploadThrottle.lastSuccessMs
@@ -203,19 +128,6 @@ async function collectTrackerDiagnostics({
       grok_home: redactValue(grokHome, home),
       grok_hooks: redactValue(grokHookState?.grokHooksDir, home),
       grok_handler: redactValue(grokHookState?.handlerPath, home),
-      kiro_ide_dev_data: redactValue(kiroIdeDevDataDir, home),
-      kiro_cli_db: redactValue(kiroCliDbPath, home),
-    },
-    kiro: {
-      ide_present: kiroIdePresent,
-      cli_present: kiroCliPresent,
-      ...(process.platform === "win32"
-        ? { wsl_mode: wsl.getWslMode(process.env), wsl_installs: kiroWslInstalls }
-        : {}),
-      cli_approximation:
-        "Kiro CLI does not persist explicit token counts (billing is credit-based on Bedrock). Tokens are approximated at 4 chars/token from user prompt chars and assistant response chars. Source rows that came through this path have model='kiro-cli-agent' when the underlying model is unknown (auto-routing); known Bedrock ARNs canonicalize to their short name (e.g. claude-sonnet-4).",
-      merge_policy:
-        "Kiro IDE and Kiro CLI both emit source='kiro' in queue.jsonl so token, cost, heatmap, and leaderboard aggregations merge transparently. Use this block to distinguish sub-path contributions.",
     },
     config: {
       base_url: typeof config?.baseUrl === "string" ? config.baseUrl : null,
@@ -354,8 +266,4 @@ function parseEpochMsToIso(v) {
 
 module.exports = {
   collectTrackerDiagnostics,
-  // Exported for the parity test that pins these inline copies to the
-  // canonical resolvers in rollout.js (see the lockstep note above).
-  resolveKiroIdeBaseInline,
-  resolveKiroCliDbPathInline,
 };

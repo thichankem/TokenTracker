@@ -123,7 +123,6 @@ const OPENCODE_GO_LOCAL_ESTIMATE_CACHE_MAX_AGE_MS = 60 * 60 * 1000;
 // restart — stops calling until it expires. Hammering during the cooldown just renews the
 // penalty, which is what kept the panel stuck on the error.
 const CLAUDE_RATE_LIMIT_FILE = "claude-usage-rate-limit.json";
-const KIRO_CREDITS_SIDECAR_FILE = "kiro-credits.json";
 const CLAUDE_RATE_LIMIT_DEFAULT_COOLDOWN_SEC = 5 * 60;
 const CLAUDE_RATE_LIMIT_MAX_COOLDOWN_SEC = 60 * 60;
 
@@ -1354,222 +1353,6 @@ function parseMonthDayResetDate(dateStr, now = new Date()) {
   return candidate.toISOString();
 }
 
-function parseKiroResetDate(dateStr, now = new Date()) {
-  if (typeof dateStr !== "string") return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    const candidate = new Date(`${dateStr}T00:00:00.000Z`);
-    if (
-      Number.isFinite(candidate.getTime()) &&
-      candidate.toISOString().slice(0, 10) === dateStr
-    ) {
-      return candidate.toISOString();
-    }
-    return null;
-  }
-  return parseMonthDayResetDate(dateStr, now);
-}
-
-function isKiroUsageOutputComplete(output) {
-  try {
-    parseKiroUsageOutput(output);
-    return true;
-  } catch (_error) {
-    return false;
-  }
-}
-
-function parseKiroCliVersion(output) {
-  const match = String(output || "").match(
-    /(?:kiro-cli\s+)?(\d+)\.(\d+)\.(\d+)/i,
-  );
-  if (!match) return null;
-  return {
-    major: Number(match[1]),
-    minor: Number(match[2]),
-    patch: Number(match[3]),
-  };
-}
-
-function kiroCliRequiresPty(version) {
-  if (!version) return false;
-  if (version.major !== 2) return version.major > 2;
-  return version.minor >= 13;
-}
-
-function quotePosixShellArg(value) {
-  return `'${String(value).replace(/'/g, `'"'"'`)}'`;
-}
-
-function kiroPtyInvocation(binaryPath, args, platform = process.platform) {
-  if (platform === "darwin") {
-    return {
-      command: "/usr/bin/script",
-      args: ["-q", "/dev/null", binaryPath, ...args],
-    };
-  }
-  if (platform === "linux") {
-    const commandLine = [binaryPath, ...args]
-      .map(quotePosixShellArg)
-      .join(" ");
-    return {
-      command: "script",
-      args: ["-q", "-c", commandLine, "/dev/null"],
-    };
-  }
-  return null;
-}
-
-function combineKiroCommandOutput(result) {
-  const stdout =
-    typeof result?.stdout === "string" ? result.stdout.trim() : "";
-  const stderr =
-    typeof result?.stderr === "string" ? result.stderr.trim() : "";
-  return [stdout, stderr].filter(Boolean).join("\n");
-}
-
-function parseKiroCommandResult(result, { now = new Date() } = {}) {
-  const output = combineKiroCommandOutput(result);
-  if (
-    result?.error?.code === "ETIMEDOUT" &&
-    !isKiroUsageOutputComplete(output)
-  ) {
-    throw new Error("Kiro CLI timed out.");
-  }
-  if (!output && result?.status !== 0) {
-    const detail = result?.error?.message
-      ? `: ${result.error.message}`
-      : ".";
-    throw new Error(`Kiro CLI failed with status ${result?.status ?? "unknown"}${detail}`);
-  }
-  return parseKiroUsageOutput(output, { now });
-}
-
-function parseKiroUsageOutput(output, { now = new Date() } = {}) {
-  const stripped = stripAnsi(output).trim();
-  if (!stripped) {
-    throw new Error("Failed to parse Kiro usage: empty output");
-  }
-
-  const lowered = stripped.toLowerCase();
-  if (
-    lowered.includes("not logged in")
-    || lowered.includes("login required")
-    || lowered.includes("failed to initialize auth portal")
-    || lowered.includes("kiro-cli login")
-    || lowered.includes("oauth error")
-  ) {
-    throw new Error("Not logged in to Kiro. Run 'kiro-cli login' first.");
-  }
-  if (lowered.includes("could not retrieve usage information")) {
-    throw new Error("Failed to parse Kiro usage: Kiro CLI could not retrieve usage information.");
-  }
-
-  let planName = "Kiro";
-  const legacyPlan = stripped.match(/\|\s*(KIRO\s+\w+)/);
-  if (legacyPlan?.[1]) {
-    planName = legacyPlan[1].trim();
-  }
-  const modernPlan = stripped.match(/Plan:\s*(.+)/);
-  if (modernPlan?.[1]) {
-    planName = modernPlan[1].split("\n")[0].trim() || planName;
-  }
-
-  const resetMatch = stripped.match(
-    /resets on (\d{4}-\d{2}-\d{2}|\d{2}\/\d{2})/i,
-  );
-  const primaryReset = resetMatch
-    ? parseKiroResetDate(resetMatch[1], now)
-    : null;
-
-  let creditsPercent = null;
-  const percentMatch = stripped.match(/█+\s*(\d+)%/);
-  if (percentMatch?.[1]) {
-    creditsPercent = clampPercent(Number(percentMatch[1]));
-  }
-
-  let creditsUsed = null;
-  let creditsTotal = null;
-  const coveredMatch = stripped.match(/\((\d+(?:\.\d+)?)\s+of\s+(\d+(?:\.\d+)?)\s+covered/i);
-  if (coveredMatch?.[1] && coveredMatch?.[2]) {
-    creditsUsed = Number(coveredMatch[1]);
-    creditsTotal = Number(coveredMatch[2]);
-  }
-  if (creditsPercent === null && creditsUsed !== null && creditsTotal && creditsTotal > 0) {
-    creditsPercent = clampPercent((creditsUsed / creditsTotal) * 100);
-  }
-
-  const managedPlan = lowered.includes("managed by admin") || lowered.includes("managed by organization");
-  if (creditsPercent === null && creditsUsed === null && managedPlan) {
-    return {
-      plan_name: planName,
-      primary_window: buildWindow({ usedPercent: 0, resetAt: null }),
-      secondary_window: null,
-    };
-  }
-  if (creditsPercent === null && creditsUsed === null) {
-    throw new Error("Failed to parse Kiro usage: usage output format may have changed.");
-  }
-
-  let bonusWindow = null;
-  const bonusMatch = stripped.match(/Bonus credits:[\s\S]*?(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)/i);
-  const expiryMatch = stripped.match(/expires in (\d+) days?/i);
-  if (bonusMatch?.[1] && bonusMatch?.[2]) {
-    const bonusUsed = Number(bonusMatch[1]);
-    const bonusTotal = Number(bonusMatch[2]);
-    const bonusPct = bonusTotal > 0 ? clampPercent((bonusUsed / bonusTotal) * 100) : 0;
-    let bonusReset = null;
-    if (expiryMatch?.[1]) {
-      const days = Number(expiryMatch[1]);
-      if (Number.isFinite(days) && days >= 0) {
-        bonusReset = new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
-      }
-    }
-    bonusWindow = buildWindow({ usedPercent: bonusPct, resetAt: bonusReset });
-  }
-
-  return {
-    plan_name: planName,
-    primary_window: buildWindow({ usedPercent: creditsPercent, resetAt: primaryReset }),
-    secondary_window: bonusWindow,
-  };
-}
-
-function readKiroCreditsSummary({ home = os.homedir() } = {}) {
-  const sidecarPath = path.join(
-    home,
-    ".tokentracker",
-    "tracker",
-    KIRO_CREDITS_SIDECAR_FILE,
-  );
-  try {
-    const parsed = JSON.parse(fs.readFileSync(sidecarPath, "utf8"));
-    if (parsed?.version !== 1) return null;
-    const totalCredits = Number(parsed.total_credits);
-    const recordCount = Number(parsed.record_count);
-    const sessionCount = Number(parsed.session_count);
-    if (
-      !Number.isFinite(totalCredits) ||
-      totalCredits < 0 ||
-      !Number.isSafeInteger(recordCount) ||
-      recordCount <= 0 ||
-      !Number.isSafeInteger(sessionCount) ||
-      sessionCount <= 0
-    ) {
-      return null;
-    }
-    return {
-      tracked_credits: totalCredits,
-      tracked_credit_records: recordCount,
-      tracked_credit_sessions: sessionCount,
-      tracked_credits_latest_at:
-        typeof parsed.latest_at === "string" ? parsed.latest_at : null,
-      tracked_credits_updated_at:
-        typeof parsed.updated_at === "string" ? parsed.updated_at : null,
-    };
-  } catch {
-    return null;
-  }
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GitHub Copilot — `GET https://api.github.com/copilot_internal/user`
@@ -2006,89 +1789,6 @@ async function fetchCopilotLimits({
   }
 }
 
-async function fetchKiroLimits({
-  commandRunner,
-  now = new Date(),
-  platform = process.platform,
-  home = os.homedir(),
-} = {}) {
-  const trackedCredits = readKiroCreditsSummary({ home });
-  const binaryPath = await whichBinary("kiro-cli", { commandRunner });
-  if (!binaryPath) {
-    return trackedCredits
-      ? { configured: true, error: null, ...trackedCredits }
-      : { configured: false };
-  }
-
-  const versionResult = await runCommand(
-    commandRunner,
-    binaryPath,
-    ["--version"],
-    {
-      timeout: 2_000,
-      env: { ...process.env, TERM: "xterm-256color" },
-    },
-  );
-  const version = parseKiroCliVersion(
-    combineKiroCommandOutput(versionResult),
-  );
-  const args = ["chat", "--no-interactive", "/usage"];
-  const pty = kiroPtyInvocation(binaryPath, args, platform);
-
-  // Kiro CLI 2.13 changed pipe behavior: /usage is treated as a normal model
-  // prompt without a terminal. Go straight to a PTY so a refresh does not
-  // accidentally spend credits on an assistant response. Older/unknown builds
-  // retain the existing pipe-first behavior, with a bounded PTY fallback if
-  // the output is not a recognizable usage panel.
-  const attempts = [];
-  if (kiroCliRequiresPty(version)) {
-    if (pty) attempts.push(pty);
-  } else {
-    attempts.push({ command: binaryPath, args });
-    if (pty) attempts.push(pty);
-  }
-
-  let lastError = null;
-  try {
-    if (attempts.length === 0) {
-      throw new Error(
-        `Kiro CLI ${version ? `${version.major}.${version.minor}.${version.patch}` : ""} requires a pseudo-terminal on ${platform}.`,
-      );
-    }
-    for (const attempt of attempts) {
-      const result = await runCommand(
-        commandRunner,
-        attempt.command,
-        attempt.args,
-        {
-          timeout: 20_000,
-          env: { ...process.env, TERM: "xterm-256color" },
-          completeWhen: (stdout, stderr) =>
-            isKiroUsageOutputComplete(`${stdout}\n${stderr}`),
-          completionGraceMs: 750,
-          killProcessGroup: Boolean(pty),
-        },
-      );
-      try {
-        return {
-          configured: true,
-          error: null,
-          ...parseKiroCommandResult(result, { now }),
-          ...(trackedCredits || {}),
-        };
-      } catch (error) {
-        lastError = error;
-      }
-    }
-    throw lastError || new Error("Failed to read Kiro usage.");
-  } catch (error) {
-    return {
-      configured: true,
-      error: error?.message || "Unknown error",
-      ...(trackedCredits || {}),
-    };
-  }
-}
 
 function parseProcessLine(line) {
   const match = String(line || "")
@@ -3676,7 +3376,7 @@ function normalizePlanLabel(raw, brand) {
   if (!s) return null;
   const lower = s.toLowerCase();
   if (["free", "none", "unknown"].includes(lower)) return null;
-  if (brand && lower === brand.toLowerCase()) return null; // e.g. Kiro defaults plan_name to "Kiro" when parse fails
+  if (brand && lower === brand.toLowerCase()) return null; // plan_name defaults to the brand when parse fails
   if (brand) {
     s = s.replace(new RegExp("^" + brand + "\\s+", "i"), "").trim();
     if (!s) return null;
@@ -3822,7 +3522,7 @@ async function fetchUsageLimitsUncached({
     : null;
 
   const providerFetch = withFetchTimeout(fetchImpl, providerTimeoutMs);
-  const [claudeResult, codexResult, cursor, kimi, gemini, kiro, antigravity, copilot, grok, zcode, opencodeGoRaw, qoder, qoderCn, codingPlan, agentPlan, commandCodeRaw, devinRaw, claudeServiceStatus] = await Promise.all([
+  const [claudeResult, codexResult, cursor, kimi, gemini, antigravity, copilot, grok, zcode, opencodeGoRaw, qoder, qoderCn, codingPlan, agentPlan, commandCodeRaw, devinRaw, claudeServiceStatus] = await Promise.all([
     claudeToken && !freshClaudeCache && !claudeRetryAtMs
       ? withProviderTimeout(fetchClaudeUsageLimits(claudeToken, { fetchImpl: providerFetch, maxAttempts: 1 }), "Claude", providerTimeoutMs).then(
           (value) => ({ status: "fulfilled", value }),
@@ -3845,7 +3545,6 @@ async function fetchUsageLimitsUncached({
       .catch((reason) => ({ configured: true, error: reason?.message || "Unknown error" })),
     withProviderTimeout(fetchGeminiLimits({ home, env, fetchImpl: providerFetch, commandRunner }), "Gemini", providerTimeoutMs)
       .catch((reason) => ({ configured: true, error: reason?.message || "Unknown error" })),
-    fetchKiroLimits({ commandRunner, now, platform, home }),
     // Antigravity's own budget keeps the serial chain inside providerTimeoutMs; this
     // outer race is the enforcing backstop every other provider already has, and the
     // signal makes a fired race actually kill the spawned scans and open sockets.
@@ -4183,7 +3882,6 @@ async function fetchUsageLimitsUncached({
     // "Kimi Type_event" (issue #130), so show the bare brand instead.
     kimi: withPlanLabel(kimi, null, "Kimi"),
     gemini: withPlanLabel(gemini, gemini.account_plan, "Gemini"),
-    kiro: withPlanLabel(kiro, kiro.plan_name, "Kiro"),
     antigravity: withPlanLabel(antigravity, antigravity.account_plan, "Antigravity"),
     copilot: withPlanLabel(copilot, copilot.plan_name, "Copilot"),
     grok: withPlanLabel(grok, null, "Grok"),
@@ -4247,9 +3945,6 @@ module.exports = {
   normalizeCursorSandUsageStatus,
   normalizeGeminiQuotaResponse,
   normalizeKimiUsageResponse,
-  parseKiroUsageOutput,
-  readKiroCreditsSummary,
-  fetchKiroLimits,
   normalizeAntigravityResponse,
   normalizeAntigravityQuotaSummary,
   loadAntigravityCredentials,

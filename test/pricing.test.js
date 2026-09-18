@@ -70,12 +70,6 @@ const FIXTURE_LITELLM = {
     output_cost_per_token: 1e-5,
     cache_read_input_token_cost: 1.25e-7,
   },
-  // Make sure the seed includes an entry CURATED also defines, so we can
-  // assert CURATED wins.
-  "kiro-cli-agent": {
-    input_cost_per_token: 999e-6,
-    output_cost_per_token: 999e-6,
-  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,17 +106,6 @@ test("matcher: lookupPricing handles CURATED alias (literal mapping)", () => {
   assert.equal(r.hit, true);
   assert.equal(r.source, "curated:alias");
   assert.equal(r.value.input, 1.25);
-});
-
-test("matcher: lookupPricing handles CURATED fuzzy substring (kiro-future-xyz → kiro-cli-agent)", () => {
-  const curated = {
-    exact: { "kiro-cli-agent": { input: 3, output: 15 } },
-    alias: {},
-    fuzzy: [{ match: "kiro", ref: "kiro-cli-agent" }],
-  };
-  const r = matcher.lookupPricing("kiro-future-xyz", { curated, litellm: {} });
-  assert.equal(r.hit, true);
-  assert.equal(r.source, "curated:fuzzy");
 });
 
 test("matcher: GPT-5.6 codex tiers resolve to their real curated rates (not the gpt-5 fallback)", () => {
@@ -561,22 +544,6 @@ test("fetcher: fetch failure with stale cache prefers stale cache over seed", as
 
 // ─────────────────────────────────────────────────────────────────────────────
 // index.js — public API + negative cache + computeRowCost contract
-
-test("index: ensurePricingLoaded + getModelPricing returns CURATED for kiro entries", async () => {
-  pricing.resetPricingForTests();
-  const cachePath = tmpCachePath();
-  await pricing.ensurePricingLoaded({
-    cachePath,
-    fetchImpl: makeFetchImpl(FIXTURE_LITELLM),
-  });
-  const kiro = pricing.getModelPricing("kiro-cli-agent");
-  // CURATED says 3 / 15; LiteLLM fixture intentionally has 999/999 to verify
-  // CURATED wins the race.
-  assert.equal(kiro.input, 3);
-  assert.equal(kiro.output, 15);
-  assert.equal(kiro.cache_read, 0.3);
-  assert.equal(kiro.cache_write, 3.75);
-});
 
 test("index: getModelPricing resolves claude-fable-5 from CURATED (not yet in LiteLLM)", async () => {
   pricing.resetPricingForTests();

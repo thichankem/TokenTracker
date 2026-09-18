@@ -31,6 +31,8 @@ const LABELS = {
   "settings.section.menubar.description": "Background sync and updates",
   "settings.section.account": "Account",
   "settings.section.account.description": "Cloud sync and profile",
+  "settings.section.remote": "Remote Connection",
+  "settings.section.remote.description": "Open the dashboard on your phone",
   "settings.section.limits": "Usage & Limits",
   "settings.section.limits.description": "Usage display and providers",
   "settings.section.labs": "Labs",
@@ -92,6 +94,10 @@ vi.mock("../components/settings/MenuBarSection.jsx", () => ({
 
 vi.mock("../components/settings/AccountSection.jsx", () => ({
   AccountSection: () => <div data-testid="account-content" />,
+}));
+
+vi.mock("../components/settings/RemoteConnectionSection.jsx", () => ({
+  RemoteConnectionSection: () => <div data-testid="remote-content" />,
 }));
 
 vi.mock("../components/settings/LabsSection.jsx", () => ({

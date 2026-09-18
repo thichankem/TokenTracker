@@ -1,5 +1,5 @@
 import React from "react";
-import { FlaskConical, Gauge, Globe, Monitor, Palette, Settings, UserRound } from "lucide-react";
+import { FlaskConical, Gauge, Globe, Monitor, Palette, Settings, Smartphone, UserRound } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { LimitsSettingsPanel } from "../components/LimitsSettingsPanel.jsx";
 import { AccountSection } from "../components/settings/AccountSection.jsx";
@@ -13,6 +13,7 @@ import {
 } from "../components/settings/Controls.jsx";
 import { MenuBarSection, NativeAppFooter } from "../components/settings/MenuBarSection.jsx";
 import { NetworkSection } from "../components/settings/NetworkSection.jsx";
+import { RemoteConnectionSection } from "../components/settings/RemoteConnectionSection.jsx";
 import { LIMIT_DISPLAY_MODES, useLimitsDisplayPrefs } from "../hooks/use-limits-display-prefs.js";
 import { useNativeSettings } from "../hooks/use-native-settings.js";
 import { useProxySettings } from "../hooks/use-proxy-settings.js";
@@ -25,6 +26,7 @@ const SETTINGS_SECTION_IDS = {
   NATIVE_APP: "native-app",
   NETWORK: "network",
   ACCOUNT: "account",
+  REMOTE: "remote",
   LIMITS: "limits",
   LABS: "labs",
 };
@@ -118,6 +120,14 @@ export function SettingsPage() {
       group: SETTINGS_GROUP_IDS.PERSONAL,
       Icon: UserRound,
       content: <AccountSection />,
+    },
+    {
+      id: SETTINGS_SECTION_IDS.REMOTE,
+      label: copy("settings.section.remote"),
+      description: copy("settings.section.remote.description"),
+      group: SETTINGS_GROUP_IDS.PERSONAL,
+      Icon: Smartphone,
+      content: <RemoteConnectionSection />,
     },
     {
       id: SETTINGS_SECTION_IDS.LIMITS,

@@ -718,10 +718,9 @@ export function getMockLeaderboard({
     const cursor = Math.floor(total * 0.1);
     const opencode = Math.floor(total * 0.08);
     const hermes = Math.floor(total * 0.03);
-    const kiro = Math.floor(total * 0.02);
     const copilot = Math.floor(total * 0.04);
     const kimi = Math.floor(total * 0.03);
-    const openclaw = Math.max(0, total - gpt - claude - gemini - cursor - opencode - hermes - kiro - copilot - kimi);
+    const openclaw = Math.max(0, total - gpt - claude - gemini - cursor - opencode - hermes - copilot - kimi);
     const isPublic = id % 7 !== 0;
     return {
       id,
@@ -737,7 +736,6 @@ export function getMockLeaderboard({
       opencode_tokens: opencode,
       openclaw_tokens: openclaw,
       hermes_tokens: hermes,
-      kiro_tokens: kiro,
       copilot_tokens: copilot,
       kimi_tokens: kimi,
       other_tokens: 0,
@@ -763,9 +761,7 @@ export function getMockLeaderboard({
                 ? "openclaw_tokens"
                 : safeMetric === "hermes"
                   ? "hermes_tokens"
-                  : safeMetric === "kiro"
-                    ? "kiro_tokens"
-                    : safeMetric === "copilot"
+                  : safeMetric === "copilot"
                       ? "copilot_tokens"
                       : safeMetric === "kimi"
                         ? "kimi_tokens"
@@ -787,7 +783,6 @@ export function getMockLeaderboard({
       opencode_tokens: String(entry.opencode_tokens),
       openclaw_tokens: String(entry.openclaw_tokens),
       hermes_tokens: String(entry.hermes_tokens ?? 0),
-      kiro_tokens: String(entry.kiro_tokens ?? 0),
       copilot_tokens: String(entry.copilot_tokens ?? 0),
       kimi_tokens: String(entry.kimi_tokens ?? 0),
       other_tokens: String(entry.other_tokens ?? 0),
@@ -809,7 +804,6 @@ export function getMockLeaderboard({
         opencode_tokens: meRow.opencode_tokens,
         openclaw_tokens: meRow.openclaw_tokens,
         hermes_tokens: meRow.hermes_tokens,
-        kiro_tokens: meRow.kiro_tokens,
         copilot_tokens: meRow.copilot_tokens,
         kimi_tokens: meRow.kimi_tokens,
         other_tokens: meRow.other_tokens,
@@ -824,7 +818,6 @@ export function getMockLeaderboard({
         opencode_tokens: "0",
         openclaw_tokens: "0",
         hermes_tokens: "0",
-        kiro_tokens: "0",
         copilot_tokens: "0",
         kimi_tokens: "0",
         other_tokens: "0",

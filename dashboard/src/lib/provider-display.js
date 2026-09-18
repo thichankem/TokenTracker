@@ -10,6 +10,7 @@ const SPECIAL_PROVIDER_NAMES = {
   dots: "Dots",
   pidots: "Pi · Dots",
   lmstudio: "LM Studio",
+  minimax: "MiniMax",
   unsloth: "Unsloth Studio",
 };
 
