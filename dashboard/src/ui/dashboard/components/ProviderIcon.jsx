@@ -444,6 +444,7 @@ const PROVIDER_LOGO_MAP = {
   // Volcano Ark (火山方舟) Coding Plan — the Volcengine 3-mountain mark.
   "VOLCANO-ARK": "/brand-logos/volcano-ark.svg",
   FREEBUFF: "/brand-logos/freebuff.svg",
+  CLINE: "/brand-logos/cline.svg",
 };
 
 // AnythingLLM publishes this compact mark in white. Keep the official asset

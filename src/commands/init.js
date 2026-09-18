@@ -74,6 +74,7 @@ const {
   resolveAnythingllmDbPath,
   resolveDevinDbPath,
   resolveFreebuffDbPaths,
+  resolveClineSessionFiles,
   resolveReasonixHome,
   resolveTraeStoragePath,
 } = require("../lib/rollout");
@@ -152,6 +153,7 @@ const SUPPORTED_PROVIDERS = [
   "Unsloth Studio",
   "Devin CLI",
   "FreeBuff Desktop",
+  "Cline",
 ];
 
 async function cmdInit(argv) {
@@ -939,6 +941,19 @@ async function applyIntegrationSetup({
         label: "FreeBuff Desktop",
         status: "detected",
         detail: `Passive reader · ${freebuffDbPaths.length} project${freebuffDbPaths.length !== 1 ? "s" : ""}`,
+      });
+    }
+  }
+
+  // Cline (cline-app desktop + VSCode extension): passive JSON reader — no
+  // hook installation needed. Reads ~/.cline/data/sessions/*/*.messages.json.
+  {
+    const clineSessionFiles = resolveClineSessionFiles(process.env);
+    if (clineSessionFiles.length > 0) {
+      summary.push({
+        label: "Cline",
+        status: "detected",
+        detail: `Passive reader · ${clineSessionFiles.length} session${clineSessionFiles.length !== 1 ? "s" : ""}`,
       });
     }
   }

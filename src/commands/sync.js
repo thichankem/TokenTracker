@@ -131,6 +131,8 @@ const {
   parseDshIncremental,
   resolveFreebuffDbPaths,
   parseFreebuffIncremental,
+  resolveClineSessionFiles,
+  parseClineIncremental,
   parseTraeCnApiIncremental,
   bucketKey,
   toUtcHalfHourStart,
@@ -303,6 +305,7 @@ const AUTO_SYNC_SOURCES = new Set([
   "dsh",
   "every-code",
   "freebuff",
+  "cline",
   "gemini",
   "goose",
   "grok",
@@ -1658,6 +1661,37 @@ async function cmdSync(argv, context = {}) {
         } catch (err) {
           warnProviderParseFailure("FreeBuff Desktop", err, opts);
         }
+      }
+    }
+
+    // ── Cline (cline-app desktop + VSCode extension) — passive JSON reader ──
+    const clineSessionFiles = sourceAllowed("cline")
+      ? resolveClineSessionFiles(process.env)
+      : [];
+    let clineResult = { recordsProcessed: 0, eventsAggregated: 0, bucketsQueued: 0 };
+    if (clineSessionFiles.length > 0) {
+      if (progress?.enabled) {
+        progress.start(
+          `Parsing Cline ${renderBar(0)} 0/${formatNumber(clineSessionFiles.length)} sessions | buckets 0`,
+        );
+      }
+      try {
+        clineResult = await parseClineIncremental({
+          sessionFiles: clineSessionFiles,
+          cursors,
+          queuePath,
+          onProgress: (p) => {
+            if (!progress?.enabled) return;
+            const pct = p.total > 0 ? p.index / p.total : 1;
+            progress.update(
+              `Parsing Cline ${renderBar(pct)} ${formatNumber(p.index)}/${formatNumber(
+                p.total,
+              )} sessions | buckets ${formatNumber(p.bucketsQueued)}`,
+            );
+          },
+        });
+      } catch (err) {
+        warnProviderParseFailure("Cline", err, opts);
       }
     }
 
@@ -3046,6 +3080,7 @@ async function cmdSync(argv, context = {}) {
       gooseResult.recordsProcessed +
       dshResult.recordsProcessed +
       freebuffResult.recordsProcessed +
+      clineResult.recordsProcessed +
       droidResult.recordsProcessed;
     const totalBuckets =
       parseResult.bucketsQueued +
@@ -3087,6 +3122,7 @@ async function cmdSync(argv, context = {}) {
       gooseResult.bucketsQueued +
       dshResult.bucketsQueued +
       freebuffResult.bucketsQueued +
+      clineResult.bucketsQueued +
       droidResult.bucketsQueued;
     const skipNoOpCursorCommit =
       opts.auto &&

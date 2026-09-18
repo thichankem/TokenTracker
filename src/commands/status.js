@@ -85,6 +85,7 @@ const {
   resolveAnythingllmDbPath,
   resolveDevinDbPath,
   resolveFreebuffDbPaths,
+  resolveClineSessionFiles,
   resolveGooseDbPath,
   listDroidSettingsFiles,
   resolveDroidSessionsDir,
@@ -722,6 +723,10 @@ async function cmdStatus(argv = []) {
   const freebuffDbPaths = resolveFreebuffDbPaths(process.env);
   const freebuffInstalled = freebuffDbPaths.length > 0;
 
+  // Cline (cline-app desktop + VSCode extension) — passive JSON reader.
+  const clineSessionFiles = resolveClineSessionFiles(process.env);
+  const clineInstalled = clineSessionFiles.length > 0;
+
   // Trae SOLO (ByteDance AI IDE) — passive entitlement snapshot reader.
   const traeStoragePath = resolveTraeStoragePath(process.env);
   const traeInstalled = Boolean(traeStoragePath);
@@ -1070,6 +1075,9 @@ async function cmdStatus(argv = []) {
         freebuff: freebuffInstalled
           ? { installed: true, files: freebuffDbPaths.length, detail: "projects" }
           : { installed: false },
+        cline: clineInstalled
+          ? { installed: true, files: clineSessionFiles.length, detail: "sessions" }
+          : { installed: false },
         trae: traeInstalled
           ? {
               installed: true,
@@ -1264,6 +1272,9 @@ async function cmdStatus(argv = []) {
         : null,
       freebuffInstalled
         ? `- FreeBuff Desktop: passive reader (${freebuffDbPaths.length} project${freebuffDbPaths.length !== 1 ? "s" : ""})`
+        : null,
+      clineInstalled
+        ? `- Cline: passive reader (${clineSessionFiles.length} session${clineSessionFiles.length !== 1 ? "s" : ""})`
         : null,
       traeInstalled
         // Deliberately NOT "passive reader": every other line with that wording

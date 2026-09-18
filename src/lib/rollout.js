@@ -3465,7 +3465,7 @@ function deriveOpencodeMessageFingerprint({ msg, totals, source }) {
     totals.reasoning_output_tokens,
     model,
     provider,
-  ].join(" ");
+  ].join("");
   // Hashed rather than stored raw: the fingerprint is persisted per message in
   // cursors.json, and heavy OpenCode users carry tens of thousands of entries.
   return crypto.createHash("sha256").update(raw).digest("base64url").slice(0, 22);
@@ -22065,6 +22065,11 @@ module.exports = {
   // FreeBuff Desktop — passive SQLite reader for ~/.config/freebuff-desktop
   resolveFreebuffDbPaths,
   parseFreebuffIncremental,
+
+  // Cline (cline-app desktop + VSCode extension) — passive JSON reader for
+  // ~/.cline/data/sessions/<session>/<session>.messages.json
+  resolveClineSessionFiles,
+  parseClineIncremental,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -22320,6 +22325,238 @@ async function parseFreebuffIncremental({
   cursors.hourly = hourlyState;
   cursors.freebuff = {
     dbs: dbState,
+    messages,
+    updatedAt,
+  };
+  return { recordsProcessed, eventsAggregated, bucketsQueued };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cline (cline-app desktop + VSCode extension; cline.bot)
+//
+// Data: JSON at ~/.cline/data/sessions/<sessionId>/<sessionId>.messages.json
+//   Override: $TOKENTRACKER_CLINE_HOME
+//
+// Each session directory holds a `<sessionId>.messages.json` object with a
+// `messages` array. Assistant messages carry a `metrics` breakdown and a
+// `modelInfo.id`:
+//   {
+//     "id": "msg_…",
+//     "role": "assistant",
+//     "ts": 1787991242184,                      // milliseconds since epoch
+//     "modelInfo": { "id": "deepseek/deepseek-v4-flash", "provider": "cline" },
+//     "metrics": {
+//       "inputTokens": 3353,
+//       "outputTokens": 305,
+//       "cacheReadTokens": 7312,
+//       "cacheWriteTokens": 890,
+//       "cost": 0.0002219
+//     }
+//   }
+// We bucket per assistant message by its `ts`, attributing the model from
+// `modelInfo.id`. The sibling `<sessionId>.json` also exposes aggregated
+// `metadata.usage`, but per-message metrics give the same half-hour bucketing
+// the rest of the tracker uses, so we read the messages file.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CLINE_SOURCE = "cline";
+
+function resolveClineHome(env = process.env) {
+  const override = typeof env.TOKENTRACKER_CLINE_HOME === "string"
+    ? env.TOKENTRACKER_CLINE_HOME.trim()
+    : "";
+  if (override) return path.resolve(override);
+  return path.join(env.HOME || env.USERPROFILE || os.homedir(), ".cline");
+}
+
+function resolveClineSessionFiles(env = process.env) {
+  const home = resolveClineHome(env);
+  const sessionsDir = path.join(home, "data", "sessions");
+  if (!fssync.existsSync(sessionsDir)) return [];
+  const out = [];
+  let entries;
+  try {
+    entries = fssync.readdirSync(sessionsDir, { withFileTypes: true });
+  } catch (_e) {
+    return [];
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const filePath = path.join(sessionsDir, entry.name, `${entry.name}.messages.json`);
+    if (fssync.existsSync(filePath)) {
+      out.push({ filePath, sessionId: entry.name });
+    }
+  }
+  out.sort((a, b) => a.filePath.localeCompare(b.filePath));
+  return out;
+}
+
+function clineFingerprint(filePath) {
+  const st = fssync.statSync(filePath);
+  return { ino: st.ino, size: st.size, mtimeMs: st.mtimeMs };
+}
+
+function normalizeClineModelName(raw) {
+  if (!raw || typeof raw !== "string") return "cline";
+  const trimmed = raw.trim();
+  if (!trimmed) return "cline";
+  const slashIdx = trimmed.indexOf("/");
+  if (slashIdx >= 0) {
+    const provider = trimmed.slice(0, slashIdx).trim().toLowerCase();
+    const model = trimmed.slice(slashIdx + 1).trim();
+    if (model) return `${provider}/${model}`;
+    return `cline/${trimmed}`;
+  }
+  return `cline/${trimmed}`;
+}
+
+async function parseClineIncremental({
+  sessionFiles,
+  cursors,
+  queuePath,
+  onProgress,
+  env,
+} = {}) {
+  await ensureDir(path.dirname(queuePath));
+  if (!cursors || typeof cursors !== "object") cursors = {};
+  if (!cursors.cline || typeof cursors.cline !== "object") cursors.cline = {};
+  const clineState = cursors.cline;
+  const storedFileState = clineState.files && typeof clineState.files === "object"
+    ? clineState.files
+    : {};
+  let fileState = { ...storedFileState };
+  const messages = clineState.messages && typeof clineState.messages === "object"
+    ? clineState.messages
+    : {};
+  const hourlyState = normalizeHourlyState(cursors?.hourly);
+  const touchedBuckets = new Set();
+  const cb = typeof onProgress === "function" ? onProgress : null;
+  let recordsProcessed = 0;
+  let eventsAggregated = 0;
+
+  const files = Array.isArray(sessionFiles)
+    ? sessionFiles
+    : resolveClineSessionFiles(env || process.env);
+  const presentSessionIds = new Set(files.map((f) => f.sessionId));
+  const total = files.length;
+
+  for (let idx = 0; idx < files.length; idx++) {
+    const { filePath, sessionId } = files[idx];
+    let fingerprint;
+    try {
+      fingerprint = clineFingerprint(filePath);
+    } catch (_e) {
+      continue;
+    }
+    const prev = fileState[filePath];
+    const unchanged = prev
+      && prev.fingerprint
+      && fingerprint
+      && prev.fingerprint.ino === fingerprint.ino
+      && prev.fingerprint.size === fingerprint.size
+      && prev.fingerprint.mtimeMs === fingerprint.mtimeMs;
+    if (unchanged) {
+      if (cb) {
+        cb({ index: idx + 1, total, recordsProcessed, eventsAggregated, bucketsQueued: touchedBuckets.size });
+      }
+      continue;
+    }
+
+    let raw;
+    try {
+      raw = fssync.readFileSync(filePath, "utf8");
+    } catch (_e) {
+      if (cb) {
+        cb({ index: idx + 1, total, recordsProcessed, eventsAggregated, bucketsQueued: touchedBuckets.size });
+      }
+      continue;
+    }
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch (_e) {
+      if (cb) {
+        cb({ index: idx + 1, total, recordsProcessed, eventsAggregated, bucketsQueued: touchedBuckets.size });
+      }
+      continue;
+    }
+    const msgs = Array.isArray(data?.messages) ? data.messages : [];
+
+    for (const msg of msgs) {
+      if (!msg || typeof msg !== "object") continue;
+      if (msg.role !== "assistant") continue;
+      const metrics = msg.metrics;
+      if (!metrics || typeof metrics !== "object") continue;
+
+      const input = toNonNegativeInt(metrics.inputTokens);
+      const output = toNonNegativeInt(metrics.outputTokens);
+      const cacheRead = toNonNegativeInt(metrics.cacheReadTokens);
+      const cacheWrite = toNonNegativeInt(metrics.cacheWriteTokens);
+      if (input === 0 && output === 0 && cacheRead === 0 && cacheWrite === 0) continue;
+
+      const ts = Number(msg.ts);
+      if (!Number.isFinite(ts) || ts <= 0) continue;
+      const bucketStart = toUtcHalfHourStart(new Date(ts).toISOString());
+      if (!bucketStart) continue;
+
+      const msgId = typeof msg.id === "string" && msg.id ? msg.id : `${sessionId}:${ts}`;
+      const key = `cline:${sessionId}:${msgId}`;
+      recordsProcessed += 1;
+
+      const rawModel = msg.modelInfo && typeof msg.modelInfo === "object"
+        ? msg.modelInfo.id
+        : null;
+      const model = normalizeClineModelName(rawModel);
+      const totals = {
+        input_tokens: input,
+        cached_input_tokens: cacheRead,
+        cache_creation_input_tokens: cacheWrite,
+        output_tokens: output,
+        reasoning_output_tokens: 0,
+        total_tokens: input + output + cacheRead + cacheWrite,
+      };
+
+      const event = {
+        key,
+        model,
+        bucketStart,
+        totals: {
+          ...totals,
+          billable_total_tokens: totals.total_tokens,
+          total_cost_usd: 0,
+          conversation_count: 0,
+        },
+      };
+
+      if (reconcilePassiveUsageEvent({
+        event,
+        source: CLINE_SOURCE,
+        messages,
+        hourlyState,
+        touchedBuckets,
+      })) eventsAggregated += 1;
+
+      if (cb) {
+        cb({ index: idx + 1, total, recordsProcessed, eventsAggregated, bucketsQueued: touchedBuckets.size });
+      }
+    }
+
+    fileState[filePath] = { fingerprint, updatedAt: new Date().toISOString() };
+  }
+
+  // Clean up messages for sessions that no longer exist on disk.
+  for (const key of Object.keys(messages)) {
+    if (key.startsWith("cline:") && !presentSessionIds.has(key.split(":")[1])) {
+      delete messages[key];
+    }
+  }
+
+  const bucketsQueued = await enqueueTouchedBuckets({ queuePath, hourlyState, touchedBuckets });
+  const updatedAt = new Date().toISOString();
+  hourlyState.updatedAt = updatedAt;
+  cursors.hourly = hourlyState;
+  cursors.cline = {
+    files: fileState,
     messages,
     updatedAt,
   };
