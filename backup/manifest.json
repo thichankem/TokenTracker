@@ -1,0 +1,17 @@
+{
+  "machine_id": "11f6ce02e11c20464c57060cf56d7b01584288118e4d6b1e606e79f55661dd3f",
+  "backed_up_at": "2026-09-18T07:50:47.449Z",
+  "files": [
+    "auto-outcomes.jsonl",
+    "auto-outcomes.jsonl.meta.json",
+    "cloud-sync-pref.json",
+    "config.json",
+    "cursors.json",
+    "project.queue.jsonl",
+    "project.queue.state.json",
+    "queue.jsonl",
+    "queue.state.json",
+    "session.queue.jsonl",
+    "session.queue.jsonl.meta.json"
+  ]
+}
