@@ -56,7 +56,7 @@ Không cần gõ URL — mở app/dashboard, vào **Settings → Remote Connecti
 
 1. Trên dashboard (máy tính), vào **Settings → Remote Connection**.
 2. **QR code hiện ngay** — dùng camera điện thoại quét.
-3. Điện thoại mở thẳng **www.tokentracker.cc**.
+3. Điện thoại mở thẳng **www.tokentracker.cc/dashboard** (route dashboard).
 4. Đăng nhập một lần (nếu chưa từng) → thấy ngay số token đã đồng bộ.
 
 > Mã QR chỉ chứa URL công khai của dashboard — **không** chứa token hay mật khẩu, nên an toàn khi quét/chụp/chia sẻ.
@@ -88,6 +88,21 @@ Ngoài `tokentracker.cc`, bạn có thể dùng **tên miền của chính mình
   hãy đảm bảo CLI/app desktop đang chạy nền trên máy tính và đã bật cloud sync.
 - **Offline**: app shell (giao diện) được cache để mở nhanh; nhưng số liệu token cần mạng
   vì chúng được lấy từ cloud.
+
+## Theo dõi các AI agent trên máy tính
+
+Token Tracker tự phát hiện (passive reader — không cần cài hook) nhiều AI agent. Chỉ cần
+cài agent đó trên máy rồi chạy `tracker sync`:
+
+| Agent | Dữ liệu đọc từ | Ghi chú |
+|---|---|---|
+| **FreeBuff Desktop** | `~/.config/freebuff-desktop/projects/<project>/desktop-v2.db` | Tự phát hiện |
+| **MiniMax Code** | `~/.minimax/v2/sessions/**/messages.jsonl` | Tự phát hiện |
+| **Kimi Code** | `~/.kimi-code/sessions/**/wire.jsonl` | Cần cài Kimi Code trước |
+| **Kimi CLI** | `~/.kimi/sessions/**/wire.jsonl` | Cần cài `kimi-cli` trước |
+
+Sau khi cài agent mới, chạy `tracker sync` (hoặc để CLI/app desktop chạy nền) để số liệu
+được cập nhật và đồng bộ lên cloud — rồi xem trên điện thoại qua QR.
 
 ## Khắc phục sự cố
 
