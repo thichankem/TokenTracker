@@ -131,6 +131,17 @@ export default function App() {
     typeof window !== "undefined" &&
     (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
 
+  // Public read-only tunnel mode. Activated when the dashboard is reached over
+  // a public tunnel URL carrying `?public=1` (the phone-QR flow) — NOT on
+  // localhost. It behaves like local mode for data fetching (shows this
+  // machine's local usage without any login) but hides the sidebar so
+  // Settings/Account and every mutating surface are unreachable.
+  const isPublicTunnel =
+    typeof window !== "undefined" &&
+    !isLocalMode &&
+    window.location.search.includes("public=1");
+  const isEffectiveLocal = isLocalMode || isPublicTunnel;
+
   const normalizedPath = pathname.replace(/\/+$/, "") || "/";
   const isDashboardDefaultPath = normalizedPath === "/" || normalizedPath === "/dashboard";
   const isLeaderboardPath = normalizedPath === "/leaderboard";
@@ -139,10 +150,10 @@ export default function App() {
   const profileUserId = profileMatch ? profileMatch[1] : null;
 
   const cloudAuthSignedIn = Boolean(insforge.enabled && insforge.signedIn);
-  const signedIn = isLocalMode || cloudAuthSignedIn;
+  const signedIn = isEffectiveLocal || cloudAuthSignedIn;
   const sessionSoftExpired = false;
   const baseUrl = getBackendBaseUrl();
-  const isAuthGateTriggered = !signedIn && !mockEnabled && !isLocalMode;
+  const isAuthGateTriggered = !signedIn && !mockEnabled && !isEffectiveLocal;
   const leaderboardAccessMode = mockEnabled
     ? "mock"
     : insforge.loading
@@ -207,7 +218,7 @@ export default function App() {
     };
   }, [cloudAuthSignedIn, insforge]);
 
-  let gate = isLocalMode || mockEnabled || screenshotMode ? "dashboard" : "landing";
+  let gate = isEffectiveLocal || mockEnabled || screenshotMode ? "dashboard" : "landing";
   if (normalizedPath === "/landing") gate = "landing";
   if (normalizedPath === "/dashboard") gate = "dashboard";
   if (isLeaderboardPath) gate = "dashboard";
@@ -251,6 +262,7 @@ export default function App() {
 
   const showSidebar =
     !publicMode &&
+    !isPublicTunnel &&
     !isAuthGateTriggered &&
     (normalizedPath === "/dashboard" ||
       normalizedPath === "/" ||
@@ -270,7 +282,7 @@ export default function App() {
   // signed-in user. publicMode (shared link) and the loading state are
   // exceptions that handle themselves.
   const publicHostNeedsLogin =
-    !isLocalMode &&
+    !isEffectiveLocal &&
     !cloudAuthSignedIn &&
     !publicMode &&
     !insforge.loading &&
@@ -288,6 +300,19 @@ export default function App() {
     normalizedPath !== "/auth/native-callback";
   if (publicHostNeedsLogin) {
     return <Navigate to="/login" replace />;
+  }
+
+  // In public read-only tunnel mode, only the dashboard/leaderboard/profile
+  // read surfaces are reachable. Every admin route (settings, skills, widgets,
+  // pet, ip-check, service-status, achievements, limits) bounces to the
+  // dashboard so a tunnel visitor can never reach account/settings controls.
+  const isTunnelRestrictedPath =
+    isPublicTunnel &&
+    !isDashboardDefaultPath &&
+    !isLeaderboardPath &&
+    !profileUserId;
+  if (isTunnelRestrictedPath) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   let content = null;

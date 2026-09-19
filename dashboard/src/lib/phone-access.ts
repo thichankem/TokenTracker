@@ -8,9 +8,8 @@ const KEY_DOMAIN = "tokentracker_phone_access_domain_v1";
 export const DEFAULT_PHONE_URL = "https://www.tokentracker.cc/dashboard";
 
 /**
- * Normalize a user-supplied domain/host into a canonical
- * `https://<host>/dashboard` URL, or return "" when the input is not a
- * plausible hostname.
+ * Normalize a user-supplied domain/host into a canonical `https://<host>/`
+ * URL, or return "" when the input is not a plausible hostname.
  *
  * Accepts: `token.example.com`, `https://token.example.com`,
  * `http://token.example.com/path`, `TOKEN.EXAMPLE.COM/`. Strips protocol,
@@ -27,7 +26,7 @@ export function normalizePhoneAccessDomain(input: string): string {
   if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(host)) {
     return "";
   }
-  return `https://${host.toLowerCase()}/dashboard`;
+  return `https://${host.toLowerCase()}/`;
 }
 
 /**
@@ -60,9 +59,16 @@ export function setPhoneAccessDomain(domain: string): string {
 }
 
 /**
- * The URL the phone QR should encode: the custom domain when set, otherwise
- * the default public dashboard.
+ * The URL the phone QR should encode.
+ *
+ * - When a custom domain (typically a public tunnel like
+ *   `https://<random>.trycloudflare.com`) is set, the QR points at
+ *   `https://<host>/?public=1` — the dashboard's public read-only mode: no
+ *   login needed, sidebar/Settings hidden, this machine's usage shown.
+ * - Otherwise it falls back to the default public dashboard (login required).
  */
 export function getPhoneAccessUrl(): string {
-  return getPhoneAccessDomain() || DEFAULT_PHONE_URL;
+  const domain = getPhoneAccessDomain();
+  if (domain) return `${domain}?public=1`;
+  return DEFAULT_PHONE_URL;
 }

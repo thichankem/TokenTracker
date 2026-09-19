@@ -13,17 +13,15 @@ describe("normalizePhoneAccessDomain", () => {
     expect(normalizePhoneAccessDomain("   ")).toBe("");
   });
 
-  it("normalizes a bare host to the dashboard route", () => {
-    expect(normalizePhoneAccessDomain("token.example.com")).toBe("https://token.example.com/dashboard");
+  it("normalizes a bare host to https://<host>/", () => {
+    expect(normalizePhoneAccessDomain("token.example.com")).toBe("https://token.example.com/");
   });
 
-  it("strips protocol, path, query and fragment, then appends /dashboard", () => {
+  it("strips protocol, path, query and fragment", () => {
     expect(normalizePhoneAccessDomain("https://token.example.com/dashboard?x=1#top")).toBe(
-      "https://token.example.com/dashboard",
+      "https://token.example.com/",
     );
-    expect(normalizePhoneAccessDomain("http://TOKEN.example.com/")).toBe(
-      "https://token.example.com/dashboard",
-    );
+    expect(normalizePhoneAccessDomain("http://TOKEN.example.com/")).toBe("https://token.example.com/");
   });
 
   it("rejects inputs that are not plausible hostnames", () => {
@@ -44,11 +42,11 @@ describe("phone-access domain preference", () => {
     expect(getPhoneAccessUrl()).toBe(DEFAULT_PHONE_URL);
   });
 
-  it("persists a normalized custom domain", () => {
+  it("persists a normalized custom domain and encodes the read-only tunnel URL", () => {
     const stored = setPhoneAccessDomain("token.example.com");
-    expect(stored).toBe("https://token.example.com/dashboard");
-    expect(getPhoneAccessDomain()).toBe("https://token.example.com/dashboard");
-    expect(getPhoneAccessUrl()).toBe("https://token.example.com/dashboard");
+    expect(stored).toBe("https://token.example.com/");
+    expect(getPhoneAccessDomain()).toBe("https://token.example.com/");
+    expect(getPhoneAccessUrl()).toBe("https://token.example.com/?public=1");
   });
 
   it("clears the preference when given an invalid value", () => {

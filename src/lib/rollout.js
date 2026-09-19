@@ -18043,13 +18043,18 @@ function extractAntigravityGenInfo(buf) {
   // #4->#3 = their sum) these are the model API's actual token counts — far
   // more accurate than estimating from the transcript's truncated/summarised
   // `content`/`thinking` fields, which under-count reasoning ~8-10x.
+  // #4->#2 is the generation's real INPUT token count (it fluctuates with
+  // prompt caching: small when most context is cached, large on cold starts).
+  let inputTokens = null;
   let outputTokens = null;
   let reasoningTokens = null;
   const f4 = inner.find((f) => f.num === 4)?.val;
   if (f4) {
     const sub = findAntigravityProtoFields(f4);
+    const inp = sub.find((f) => f.num === 2)?.val;
     const out = sub.find((f) => f.num === 10)?.val;
     const rea = sub.find((f) => f.num === 9)?.val;
+    if (Number.isFinite(inp) && inp > 0) inputTokens = inp;
     if (Number.isFinite(out) && out > 0) outputTokens = out;
     if (Number.isFinite(rea) && rea > 0) reasoningTokens = rea;
   }
@@ -18066,7 +18071,7 @@ function extractAntigravityGenInfo(buf) {
     }
   }
 
-  return { model, contextTokens, outputTokens, reasoningTokens, lastStepIndex };
+  return { model, contextTokens, inputTokens, outputTokens, reasoningTokens, lastStepIndex };
 }
 
 function resolveAntigravityDbPath(transcriptPath) {
@@ -18095,6 +18100,7 @@ function readAntigravityConversationDb(dbPath) {
         info &&
         info.lastStepIndex != null &&
         (info.contextTokens > 0 ||
+          (info.inputTokens != null && info.inputTokens > 0) ||
           (info.outputTokens != null && info.outputTokens > 0) ||
           (info.reasoningTokens != null && info.reasoningTokens > 0))
       ) {
@@ -18208,6 +18214,15 @@ async function parseAntigravityFile({
       dbTurn && Number.isFinite(dbTurn.reasoningTokens) && dbTurn.reasoningTokens > 0
         ? dbTurn.reasoningTokens
         : null;
+    // Real per-step INPUT tokens from gen_metadata (#4->#2). The transcript's
+    // context-delta estimate only counts NET new context, which under-counts
+    // the actual input the API received (some generations re-send a large
+    // prompt even when the context barely grew). When the DB carries the real
+    // input it is authoritative.
+    const dbInput =
+      dbTurn && Number.isFinite(dbTurn.inputTokens) && dbTurn.inputTokens > 0
+        ? dbTurn.inputTokens
+        : null;
     if (dbTurn && dbTurn.model) {
       const norm = normalizeAntigravityTranscriptModel(dbTurn.model);
       if (norm) currentModel = norm;
@@ -18257,6 +18272,9 @@ async function parseAntigravityFile({
         previousContextTokens = 0;
       }
       const inputDelta = Math.max(0, contextTokens - previousContextTokens);
+      // Prefer the real per-generation input from the DB; fall back to the
+      // context-delta estimate when the DB doesn't carry it.
+      const inputTokens = dbInput != null ? dbInput : inputDelta;
 
       const outputTokens =
         dbOutput != null
@@ -18264,10 +18282,10 @@ async function parseAntigravityFile({
           : antigravityValueTokens(content) + antigravityValueTokens(parsed.tool_calls);
       const reasoningTokens = dbReasoning != null ? dbReasoning : antigravityValueTokens(thinking);
 
-      delta.input_tokens = inputDelta;
+      delta.input_tokens = inputTokens;
       delta.output_tokens = outputTokens;
       delta.reasoning_output_tokens = reasoningTokens;
-      delta.total_tokens = inputDelta + outputTokens + reasoningTokens;
+      delta.total_tokens = inputTokens + outputTokens + reasoningTokens;
       delta.billable_total_tokens = delta.total_tokens;
       delta.conversation_count = 1;
       billedPlanner = delta.total_tokens > 0;
@@ -18387,14 +18405,25 @@ function estimateAntigravityTokens(text) {
   if (typeof text !== "string" || text.length === 0) return 0;
   let cjk = 0;
   let other = 0;
+  let newlines = 0;
   for (const ch of text) {
+    if (ch === "\n") {
+      newlines += 1;
+      continue;
+    }
     if (isCjkCodePoint(ch.codePointAt(0))) {
       cjk += 1;
     } else {
       other += 1;
     }
   }
-  return cjk + Math.ceil(other / 4);
+  // Base rate: CJK ≈ 1 token/char, everything else ≈ 4 chars/token. Multi-line
+  // content (code diffs, tool output — the bulk of an AI-coding transcript)
+  // additionally bills each newline as its own token, because SentencePiece /
+  // BBPE tokenizers emit a token at every line break. The old blanket 4-char
+  // rate swallowed those newline tokens and under-counted real usage. Strings
+  // with no newlines keep the exact legacy estimate.
+  return cjk + Math.ceil(other / 4) + newlines;
 }
 
 function isCjkCodePoint(code) {
@@ -20637,9 +20666,7 @@ async function parseFreebuffIncremental({
     const unchanged = previousDb
       && previousDb.fingerprint
       && fingerprint
-      && previousDb.fingerprint.ino === fingerprint.ino
-      && previousDb.fingerprint.size === fingerprint.size
-      && previousDb.fingerprint.mtimeMs === fingerprint.mtimeMs;
+      && sameSqliteFingerprint(previousDb.fingerprint, fingerprint);
     if (unchanged) {
       if (cb) {
         cb({
@@ -20704,7 +20731,10 @@ async function parseFreebuffIncremental({
       const bucketStart = normalizeFreebuffTimestamp(row.ts);
       if (!bucketStart) continue;
 
-      const key = `freebuff:${seq}`;
+      // Key must include the DB path: `seq` is only unique WITHIN a project
+      // DB, so a bare `freebuff:${seq}` collides across projects and reconcile
+      // would subtract one project's event when another shares the same seq.
+      const key = `freebuff|${dbPath}|${seq}`;
       const event = {
         key,
         model,
@@ -20743,10 +20773,14 @@ async function parseFreebuffIncremental({
     };
   }
 
-  // Clean up messages for deleted DBs
+  // Clean up messages for deleted DBs. Keys are `freebuff|<dbPath>|<seq>`; the
+  // DB path sits between the prefix and the final `|` (paths may themselves
+  // contain `:` on Windows, so we can't split on `:`).
   for (const key of Object.keys(messages)) {
-    if (key.startsWith("freebuff:") && !presentDbs.has(key.split(":")[1])) {
-      delete messages[key];
+    if (key.startsWith("freebuff|")) {
+      const sep = key.lastIndexOf("|");
+      const dbPathForKey = key.slice("freebuff|".length, sep);
+      if (!presentDbs.has(dbPathForKey)) delete messages[key];
     }
   }
 

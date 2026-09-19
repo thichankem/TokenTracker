@@ -14,13 +14,23 @@ export const MAC_DMG_URL = `${RELEASES_URL}/download/TokenTrackerBar.dmg`;
 export const WIN_SETUP_URL = `${RELEASES_URL}/download/TokenTracker-Setup.exe`;
 
 /**
+ * True when the dashboard should read this machine's local CLI data instead of
+ * the cloud. Covers real localhost AND the public read-only tunnel mode
+ * (`?public=1` on a non-localhost host — the phone-QR flow), where we still
+ * want the local CLI's relative-path API rather than the cloud.
+ */
+export function isEffectiveLocalHost() {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
+  if (host === "localhost" || host === "127.0.0.1") return true;
+  return window.location.search.includes("public=1");
+}
+
+/**
  * 仪表盘/用量等：本地 localhost 一律用空字符串（相对路径走 CLI 内置 API），不访问云端。
  */
 export function getBackendBaseUrl() {
-  const isLocalhost =
-    typeof window !== "undefined" &&
-    (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
-  if (isLocalhost) return "";
+  if (isEffectiveLocalHost()) return "";
 
   // Non-localhost (tokentracker.cc): dashboard usage data comes from the
   // cloud. Delegate to getInsforgeRemoteUrl so the hardcoded prod fallback

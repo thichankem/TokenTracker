@@ -75,6 +75,8 @@ const {
   resolveKilocodeRoots,
   resolveZedDbPath,
   resolveGooseDbPath,
+  parseFreebuffIncremental,
+  resolveFreebuffDbPaths,
   listRolloutFilesDeep,
   filterColdCodexRolloutFiles,
   bucketKey,
@@ -10924,6 +10926,112 @@ test("parseGrokBuildIncremental does not mark zero-token sessions as seen", asyn
   }
 });
 
+test("estimateAntigravityTokens bills newlines as tokens for multi-line content", () => {
+  // Newline-free strings keep the legacy 4-char/token estimate.
+  assert.equal(estimateAntigravityTokens("x".repeat(40)), 10);
+  assert.equal(estimateAntigravityTokens("a".repeat(20)), 5);
+  // The same 40 chars split across 4 lines (3 newlines) must estimate HIGHER
+  // than the legacy 4-char rate: each newline is its own token in real
+  // SentencePiece/BBPE tokenizers, so multi-line code would otherwise be
+  // under-counted.
+  const multiLine = ["x".repeat(10), "x".repeat(10), "x".repeat(10), "x".repeat(10)].join("\n");
+  assert.equal(estimateAntigravityTokens(multiLine), 10 + 3);
+  // CJK still counts ~1 token/char and newlines still add on top.
+  assert.equal(estimateAntigravityTokens("检查本项目对 antigravity 的用量\n"), 9 + 1 + Math.ceil(13 / 4));
+});
+
+test("parseFreebuffIncremental bills real usage and re-parses when the DB grows", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "tt-freebuff-"));
+  try {
+    const dbPath = path.join(tmp, "desktop-v2.db");
+    const queuePath = path.join(tmp, "queue.jsonl");
+    const cursors = { version: 1, files: {}, updatedAt: null };
+
+    // FreeBuff-shaped DB: threads (model) + messages (assistant metrics_json).
+    sqliteCli.execFileSync("sqlite3", [
+      dbPath,
+      [
+        "CREATE TABLE threads (id TEXT PRIMARY KEY, model TEXT);",
+        "CREATE TABLE messages (seq INTEGER PRIMARY KEY AUTOINCREMENT, thread_id TEXT NOT NULL, role TEXT NOT NULL, metrics_json TEXT NOT NULL DEFAULT '{}', ts INTEGER NOT NULL);",
+        "INSERT INTO threads VALUES ('t1','deepseek/deepseek-v4-flash');",
+        `INSERT INTO messages (thread_id, role, metrics_json, ts) VALUES ('t1','assistant','{"usage":{"inputTokens":100,"cachedInputTokens":40,"outputTokens":20,"reasoningOutputTokens":5,"totalTokens":165}}', 1789786816111);`,
+      ].join(" "),
+    ]);
+
+    const first = await parseFreebuffIncremental({ dbPaths: [dbPath], cursors, queuePath });
+    assert.equal(first.eventsAggregated, 1);
+    let queued = await readJsonLines(queuePath);
+    assert.equal(queued.length, 1);
+    assert.equal(queued[0].source, "freebuff");
+    assert.equal(queued[0].model, "deepseek/deepseek-v4-flash");
+    assert.equal(queued[0].input_tokens, 100);
+    assert.equal(queued[0].cached_input_tokens, 40);
+    assert.equal(queued[0].output_tokens, 20);
+    assert.equal(queued[0].reasoning_output_tokens, 5);
+    assert.equal(queued[0].total_tokens, 165);
+
+    // Simulate NEW usage: append another assistant message. The DB fingerprint
+    // changes, so the parser MUST re-read it — regression for the bug where the
+    // sidecar fingerprint was compared at the wrong nesting level (fingerprint.ino
+    // instead of fingerprint.db.ino), so the DB was never re-parsed after the
+    // first sync and new usage was silently dropped.
+    sqliteCli.execFileSync("sqlite3", [
+      dbPath,
+      `INSERT INTO messages (thread_id, role, metrics_json, ts) VALUES ('t1','assistant','{"usage":{"inputTokens":200,"cachedInputTokens":80,"outputTokens":40,"reasoningOutputTokens":10,"totalTokens":330}}', 1789786816111);`,
+    ]);
+    const second = await parseFreebuffIncremental({ dbPaths: [dbPath], cursors, queuePath });
+    assert.equal(second.eventsAggregated, 1);
+    queued = await readJsonLines(queuePath);
+    // Same half-hour bucket, so the latest snapshot accumulates both messages.
+    const latest = queued.at(-1);
+    assert.equal(latest.input_tokens, 300);
+    assert.equal(latest.cached_input_tokens, 120);
+    assert.equal(latest.output_tokens, 60);
+    assert.equal(latest.reasoning_output_tokens, 15);
+    assert.equal(latest.total_tokens, 495);
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("parseFreebuffIncremental keys events per DB so overlapping seq values don't collide", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "tt-freebuff-multidb-"));
+  try {
+    const queuePath = path.join(tmp, "queue.jsonl");
+    const cursors = { version: 1, files: {}, updatedAt: null };
+    const mkdb = (name, model, inputTokens) => {
+      const dir = path.join(tmp, name);
+      fssync.mkdirSync(dir, { recursive: true });
+      const dbPath = path.join(dir, "desktop-v2.db");
+      sqliteCli.execFileSync("sqlite3", [
+        dbPath,
+        [
+          "CREATE TABLE threads (id TEXT PRIMARY KEY, model TEXT);",
+          "CREATE TABLE messages (seq INTEGER PRIMARY KEY AUTOINCREMENT, thread_id TEXT NOT NULL, role TEXT NOT NULL, metrics_json TEXT NOT NULL DEFAULT '{}', ts INTEGER NOT NULL);",
+          `INSERT INTO threads VALUES ('t1','${model}');`,
+          `INSERT INTO messages (thread_id, role, metrics_json, ts) VALUES ('t1','assistant','{"usage":{"inputTokens":${inputTokens},"outputTokens":10,"totalTokens":${inputTokens + 10}}}', 1789800000000);`,
+        ].join(" "),
+      ]);
+      return dbPath;
+    };
+    // Two projects whose messages share the same seq=1. A bare `freebuff:1` key
+    // would collide and reconcile would subtract one project's event; the key
+    // must be scoped per DB path so both are counted.
+    const dbA = mkdb("proj-a", "deepseek/deepseek-v4-flash", 100);
+    const dbB = mkdb("proj-b", "mimo/mimo-v2.5", 200);
+
+    const res = await parseFreebuffIncremental({ dbPaths: [dbA, dbB], cursors, queuePath });
+    assert.equal(res.eventsAggregated, 2);
+    const queued = await readJsonLines(queuePath);
+    assert.equal(queued.length, 2);
+    const byModel = Object.fromEntries(queued.map((r) => [r.model, r]));
+    assert.equal(byModel["deepseek/deepseek-v4-flash"].total_tokens, 110);
+    assert.equal(byModel["mimo/mimo-v2.5"].total_tokens, 210);
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("parseAntigravityIncremental bills only newly added context per planner call", async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "tt-antigravity-"));
   try {
@@ -11495,6 +11603,7 @@ function buildAntigravityTestProto({
   model,
   contextTokens,
   lastStepIndex,
+  inputTokens,
   outputTokens,
   reasoningTokens,
 } = {}) {
@@ -11506,11 +11615,12 @@ function buildAntigravityTestProto({
     const f9 = encodeAntigravityTestLd(9, f10);
     parts.push(f9);
   }
-  // Generation-result record (inner #4): #9 = real reasoning tokens, #10 = real
-  // output tokens. When present, the parser bills these instead of estimating
-  // from the (truncated) transcript content/thinking fields.
-  if (Number.isFinite(reasoningTokens) || Number.isFinite(outputTokens)) {
+  // Generation-result record (inner #4): #2 = real input tokens, #9 = real
+  // reasoning tokens, #10 = real output tokens. When present, the parser bills
+  // these instead of estimating from the (truncated) transcript fields.
+  if (Number.isFinite(inputTokens) || Number.isFinite(reasoningTokens) || Number.isFinite(outputTokens)) {
     const sub = [];
+    if (Number.isFinite(inputTokens)) sub.push(encodeAntigravityTestVi(2, inputTokens));
     if (Number.isFinite(reasoningTokens)) sub.push(encodeAntigravityTestVi(9, reasoningTokens));
     if (Number.isFinite(outputTokens)) sub.push(encodeAntigravityTestVi(10, outputTokens));
     parts.push(encodeAntigravityTestLd(4, Buffer.concat(sub)));
@@ -11602,6 +11712,7 @@ test("extractAntigravityGenInfo extracts model, context tokens, and step index f
   assert.deepEqual(info, {
     model: "gemini-3.8-flash",
     contextTokens: 25000,
+    inputTokens: null,
     outputTokens: null,
     reasoningTokens: null,
     lastStepIndex: 0,
@@ -11620,6 +11731,7 @@ test("extractAntigravityGenInfo reads real output/reasoning tokens from the gene
   assert.deepEqual(info, {
     model: "gemini-3.8-flash",
     contextTokens: 65000,
+    inputTokens: null,
     outputTokens: 820,
     reasoningTokens: 4700,
     lastStepIndex: 4,
@@ -11751,6 +11863,77 @@ test("parseAntigravityIncremental bills real DB output/reasoning tokens instead 
     // output/reasoning come from the DB, not the transcript char estimate
     assert.equal(queued[0].output_tokens, 770 + 830);
     assert.equal(queued[0].reasoning_output_tokens, 5300 + 4900);
+    assert.equal(
+      queued[0].total_tokens,
+      queued[0].input_tokens + queued[0].output_tokens + queued[0].reasoning_output_tokens,
+    );
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test("parseAntigravityIncremental bills the real per-generation input from gen_metadata instead of the context delta", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "tt-antigravity-real-input-"));
+  try {
+    // The DB carries real per-generation INPUT tokens (#4->#2). The parser must
+    // sum those, not the context-delta estimate (which only counts net new
+    // context and under-counts input when a generation re-sends a large prompt).
+    const { transcriptPath, queuePath } = await setupAntigravitySqliteSession(tmp, {
+      protos: [
+        buildAntigravityTestProto({
+          model: "gemini-3.8-flash",
+          contextTokens: 1000,
+          inputTokens: 41200,
+          outputTokens: 710,
+          reasoningTokens: 920,
+          lastStepIndex: 0,
+        }),
+        buildAntigravityTestProto({
+          model: "gemini-3.8-flash",
+          contextTokens: 2150,
+          inputTokens: 38900,
+          outputTokens: 655,
+          reasoningTokens: 745,
+          lastStepIndex: 2,
+        }),
+      ],
+      lines: antigravityPlannerLines([
+        {
+          userStep: 0,
+          userAt: "2026-04-05T14:00:00.000Z",
+          userContent: "hello",
+          plannerStep: 1,
+          plannerAt: "2026-04-05T14:01:00.000Z",
+          plannerContent: "hi",
+          thinking: "think1",
+        },
+        {
+          userStep: 2,
+          userAt: "2026-04-05T14:02:00.000Z",
+          userContent: "next prompt",
+          plannerStep: 3,
+          plannerAt: "2026-04-05T14:03:00.000Z",
+          plannerContent: "done",
+          thinking: "think2",
+        },
+      ]),
+    });
+    const cursors = { version: 1, files: {}, updatedAt: null };
+
+    const result = await parseAntigravityIncremental({
+      sessionFiles: [transcriptPath],
+      cursors,
+      queuePath,
+    });
+    assert.equal(result.eventsAggregated, 2);
+
+    const queued = await readJsonLines(queuePath);
+    assert.equal(queued.length, 1);
+    // Input comes from the DB (#4->#2), summed per generation — NOT the context
+    // delta (1000 + (2150-1000) = 2150).
+    assert.equal(queued[0].input_tokens, 41200 + 38900);
+    assert.equal(queued[0].output_tokens, 710 + 655);
+    assert.equal(queued[0].reasoning_output_tokens, 920 + 745);
     assert.equal(
       queued[0].total_tokens,
       queued[0].input_tokens + queued[0].output_tokens + queued[0].reasoning_output_tokens,
