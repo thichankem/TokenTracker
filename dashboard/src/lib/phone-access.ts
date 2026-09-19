@@ -1,13 +1,16 @@
 const KEY_DOMAIN = "tokentracker_phone_access_domain_v1";
 
 /**
- * The default public dashboard URL used when no custom domain is set.
+ * The default public dashboard URL used when no custom domain is set. Points at
+ * the `/dashboard` route (not the landing page) so scanning the QR opens the
+ * dashboard directly — or the sign-in page when the phone isn't signed in yet.
  */
-export const DEFAULT_PHONE_URL = "https://www.tokentracker.cc/";
+export const DEFAULT_PHONE_URL = "https://www.tokentracker.cc/dashboard";
 
 /**
- * Normalize a user-supplied domain/host into a canonical `https://<host>/`
- * URL, or return "" when the input is not a plausible hostname.
+ * Normalize a user-supplied domain/host into a canonical
+ * `https://<host>/dashboard` URL, or return "" when the input is not a
+ * plausible hostname.
  *
  * Accepts: `token.example.com`, `https://token.example.com`,
  * `http://token.example.com/path`, `TOKEN.EXAMPLE.COM/`. Strips protocol,
@@ -24,7 +27,7 @@ export function normalizePhoneAccessDomain(input: string): string {
   if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(host)) {
     return "";
   }
-  return `https://${host.toLowerCase()}/`;
+  return `https://${host.toLowerCase()}/dashboard`;
 }
 
 /**
